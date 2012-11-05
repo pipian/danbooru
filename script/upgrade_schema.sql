@@ -2966,7 +2966,7 @@ create index index_notes_on_creator_id on notes (creator_id);
 alter table notes drop column ip_addr;
 alter table notes drop column version;
 
-drop table pixiv_proxies;
+-- drop table pixiv_proxies;
 
 alter table pool_updates drop constraint pool_updates_pool_id_fkey;
 alter table pool_updates rename to pool_versions;
@@ -3037,7 +3037,7 @@ alter index idx_posts__md5 rename to index_posts_on_md5;
 alter index idx_posts__created_at rename to index_posts_on_created_at;
 alter index idx_posts__last_commented_at rename to index_posts_on_last_commented_at;
 alter index idx_posts__last_noted_at rename to index_posts_on_last_noted_at;
-alter index idx_posts__users rename to index_posts_on_uploader_id;
+alter index idx_posts__user rename to index_posts_on_uploader_id;
 alter index idx_posts_parent_id rename to index_posts_on_parent_id;
 alter index index_posts_on_height rename to index_posts_on_image_height;
 alter index index_posts_on_width rename to index_posts_on_image_width;
@@ -3176,14 +3176,14 @@ CREATE TABLE user_password_reset_nonces (
     created_at timestamp without time zone,
     updated_at timestamp without time zone
 );
-ALTER TABLE public.user_password_reset_nonces OWNER TO danbooru;
+ALTER TABLE public.user_password_reset_nonces OWNER TO bronibooru;
 CREATE SEQUENCE user_password_reset_nonces_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-ALTER TABLE public.user_password_reset_nonces_id_seq OWNER TO danbooru;
+ALTER TABLE public.user_password_reset_nonces_id_seq OWNER TO bronibooru;
 ALTER SEQUENCE user_password_reset_nonces_id_seq OWNED BY user_password_reset_nonces.id;
 ALTER TABLE user_password_reset_nonces ALTER COLUMN id SET DEFAULT nextval('user_password_reset_nonces_id_seq'::regclass);
 ALTER TABLE ONLY user_password_reset_nonces
