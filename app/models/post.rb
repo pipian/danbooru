@@ -118,12 +118,20 @@ class Post < ActiveRecord::Base
     end
 
     def file_url
-      "/data/#{file_path_prefix}#{md5}.#{file_ext}"
+      if Danbooru.config.image_store == :amazon_s3
+        "//s3.amazonaws.com/#{Danbooru.config.amazon_s3_bucket_name}/#{file_path_prefix}#{md5}.#{file_ext}"
+      else
+        "/data/#{file_path_prefix}#{md5}.#{file_ext}"
+      end
     end
     
     def large_file_url
       if has_large?
-        "/data/sample/#{file_path_prefix}#{Danbooru.config.large_image_prefix}#{md5}.jpg"
+        if Danbooru.config.image_store == :amazon_s3
+          "//s3.amazonaws.com/#{Danbooru.config.amazon_s3_bucket_name}/sample/#{md5}.jpg"
+        else
+          "/data/sample/#{file_path_prefix}#{Danbooru.config.large_image_prefix}#{md5}.jpg"
+        end
       else
         file_url
       end
@@ -136,6 +144,8 @@ class Post < ActiveRecord::Base
       
       if Danbooru.config.ssd_path
         "/ssd/data/preview/#{file_path_prefix}#{md5}.jpg"
+      elsif Danbooru.config.image_store == :amazon_s3
+        "//s3.amazonaws.com/#{Danbooru.config.amazon_s3_bucket_name}/preview/#{file_path_prefix}#{md5}.jpg"
       else
         "/data/preview/#{file_path_prefix}#{md5}.jpg"
       end
