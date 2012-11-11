@@ -5,11 +5,11 @@ class Advertisement < ActiveRecord::Base
   after_destroy :delete_from_servers
 
   def copy_to_servers
-    RemoteFileManager.new(image_path).distribute
+    RemoteFileManager.new(data_root_path, rel_image_path).distribute
   end
   
   def delete_from_servers
-    RemoteFileManager.new(image_path).delete
+    RemoteFileManager.new(data_root_path, rel_image_path).delete
   end
 
   def hit!(ip_addr)
@@ -28,8 +28,16 @@ class Advertisement < ActiveRecord::Base
     "/images/advertisements/#{file_name}"
   end
 
+  def data_root_path
+    "#{Rails.root}/public/images"
+  end
+
+  def rel_image_path
+    "advertisements/#{file_name}"
+  end
+
   def image_path
-    "#{Rails.root}/public/images/advertisements/#{file_name}"
+    "#{data_root_path}/#{rel_image_path}"
   end
   
   def file

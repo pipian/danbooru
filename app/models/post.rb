@@ -65,44 +65,62 @@ class Post < ActiveRecord::Base
     
   module FileMethods
     def distribute_files
-      RemoteFileManager.new(file_path).distribute
-      RemoteFileManager.new(real_preview_file_path).distribute
-      RemoteFileManager.new(ssd_preview_file_path).distribute if Danbooru.config.ssd_path
-      RemoteFileManager.new(large_file_path).distribute if has_large?
+      RemoteFileManager.new(data_root_path, rel_file_path).distribute
+      RemoteFileManager.new(data_root_path, rel_real_preview_file_path).distribute
+      RemoteFileManager.new(ssd_preview_file_path, nil).distribute if Danbooru.config.ssd_path
+      RemoteFileManager.new(data_root_path, rel_large_file_path).distribute if has_large?
     end
     
     def delete_remote_files
-      RemoteFileManager.new(file_path).delete
-      RemoteFileManager.new(real_preview_file_path).delete
-      RemoteFileManager.new(ssd_preview_file_path).delete if Danbooru.config.ssd_path
-      RemoteFileManager.new(large_file_path).delete if has_large?
+      RemoteFileManager.new(data_root_path, rel_file_path).delete
+      RemoteFileManager.new(data_root_path, rel_real_preview_file_path).delete
+      RemoteFileManager.new(ssd_preview_file_path, nil).delete if Danbooru.config.ssd_path
+      RemoteFileManager.new(data_root_path, rel_large_file_path).delete if has_large?
     end
     
     def delete_files
-      FileUtils.rm_f(file_path)
-      FileUtils.rm_f(large_file_path)
+      if Danbooru.config.image_store != :amazon_s3
+        FileUtils.rm_f(file_path)
+        FileUtils.rm_f(large_file_path)
+        FileUtils.rm_f(real_preview_file_path)
+      end
       FileUtils.rm_f(ssd_preview_file_path) if Danbooru.config.ssd_path
-      FileUtils.rm_f(real_preview_file_path)
     end
 
     def file_path_prefix
       Rails.env == "test" ? "test." : ""
     end
     
-    def file_path
-      "#{Rails.root}/public/data/#{file_path_prefix}#{md5}.#{file_ext}"
+    def data_root_path
+      "#{Rails.root}/public/data"
     end
     
-    def large_file_path
+    def rel_file_path
+      "#{file_path_prefix}#{md5}.#{file_ext}"
+    end
+    
+    def file_path
+      "#{data_root_path}/#{rel_file_path}"
+    end
+    
+    def rel_large_file_path
       if has_large?
-        "#{Rails.root}/public/data/sample/#{file_path_prefix}#{Danbooru.config.large_image_prefix}#{md5}.jpg"
+        "sample/#{file_path_prefix}#{Danbooru.config.large_image_prefix}#{md5}.jpg"
       else
-        file_path
+        rel_file_path
       end
     end
     
+    def large_file_path
+      "#{data_root_path}/#{rel_large_file_path}"
+    end
+
+    def rel_real_preview_file_path
+      "preview/#{file_path_prefix}#{md5}.jpg"
+    end
+
     def real_preview_file_path
-      "#{Rails.root}/public/data/preview/#{file_path_prefix}#{md5}.jpg"
+      "#{data_root_path}/#{rel_real_preview_file_path}"
     end
     
     def ssd_preview_file_path
