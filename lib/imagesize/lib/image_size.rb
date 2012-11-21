@@ -3,6 +3,7 @@
 
 class ImageSize
   require "stringio"
+  require "rexml/document"
 
 # Image Type Constants
   module Type
@@ -20,6 +21,8 @@ class ImageSize
     XPM  = "XPM"
     PSD  = "PSD"
     SWF  = "SWF"
+    SVG  = "SVG"
+    MPO  = "MPO"
   end
 
   JpegCodeCheck = [
@@ -43,7 +46,16 @@ class ImageSize
     @img_height = nil
     @img_type   = nil
 
-    if @img_data.is_a?(IO)
+    # First try parsing as XML.
+    begin
+      doc = REXML::Document.new(@img_data)
+    rescue
+      doc = nil
+    end
+    if !doc.nil? && !doc.root.nil? && doc.root.name == 'svg' && doc.root.namespace == 'http://www.w3.org/2000/svg'
+      @img_top = doc.root
+    elsif @img_data.is_a?(IO)
+      @img_data.seek(0, 0)
       img_top = @img_data.read(1024)
       img_io = def_read_o(@img_data)
     elsif @img_data.is_a?(StringIO)
@@ -121,8 +133,10 @@ class ImageSize
   end
 
   def check_type(img_top)
-    if img_top =~ /^GIF8[7,9]a/                      then Type::GIF
+    if img_top.kind_of? REXML::Node                  then Type::SVG
+    elsif img_top =~ /^GIF8[7,9]a/                   then Type::GIF
     elsif img_top[0, 8] == "\x89PNG\x0d\x0a\x1a\x0a" then Type::PNG
+    # Technically, the following could be MPO too.  We check this later.
     elsif img_top[0, 2] == "\xFF\xD8"                then Type::JPEG
     elsif img_top[0, 2] == 'BM'                      then Type::BMP
     elsif img_top =~ /^P[1-7]/                       then Type::PPM
@@ -157,8 +171,16 @@ class ImageSize
       if JpegCodeCheck.include?(code)
         height, width = img_io.read_o(5).unpack('xnn')
         return([width, height])
+      elsif code == "\xe2"
+        # Is this actually an MPO file?
+        id = img_io.read_o(4)
+        if id == "MPF\x00"
+          @img_type = Type::MPO
+        end
+        img_io.read_o(length - 6)
+      else
+        img_io.read_o(length - 2)
       end
-      img_io.read_o(length - 2)
     end
   end
 
@@ -249,6 +271,28 @@ class ImageSize
 
     raise "#{if width.nil? then 'width not defined.' end} #{if height.nil? then 'height not defined.' end}" if width.nil? || height.nil?
     [width, height]
+  end
+
+  def measure_SVG()
+    # This is very rudimentary and assumes that the width and height
+    # attrs are set
+    width =  @img_top.attributes['width'] || '100%'
+    height = @img_top.attributes['height'] || '100%'
+    
+    # We assume 72dpi, 10ppEm, 5ppEx, and that the viewport is 1000x1000px
+    [width, height].collect { |x|
+      if x.match /em$/    then x = 10 * x.to_f
+      elsif x.match /ex$/ then x = 5 * x.to_f
+      elsif x.match /px$/ then x = x.to_f
+      elsif x.match /in$/ then x = 72 * x.to_f
+      elsif x.match /cm$/ then x = 28.34645 * x.to_f
+      elsif x.match /mm$/ then x = 2.834645 * x.to_f
+      elsif x.match /pt$/ then x = x.to_f
+      elsif x.match /pc$/ then x = 12 * x.to_f
+      elsif x.match /%$/  then x = 1000 * x.to_f / 100
+      end
+      x.to_i
+    }
   end
 
   def measure_SWF(img_io)

@@ -188,21 +188,35 @@ class Post < ActiveRecord::Base
       when "large"
         if image_width > Danbooru.config.large_image_width
           large_file_path
+        elsif is_svg?
+          large_file_path
         else
           file_path
         end
         
       else
-        file_path
+        if is_svg?
+          large_file_path
+        else
+          file_path
+        end
       end
     end
     
     def is_image?
-      file_ext =~ /jpg|gif|png/
+      file_ext =~ /jpg|gif|png|mpo|svg/
     end
     
     def is_flash?
       file_ext =~ /swf/
+    end
+
+    def is_svg?
+      file_ext =~ /svg/
+    end
+
+    def is_mpo?
+      file_ext =~ /mpo/
     end
   end
   

@@ -126,7 +126,7 @@ class Upload < ActiveRecord::Base
     end
     
     def is_image?
-      ["jpg", "gif", "png"].include?(file_ext)
+      ["jpg", "gif", "png", "svg", "mpo"].include?(file_ext)
     end
   end
 
@@ -134,7 +134,7 @@ class Upload < ActiveRecord::Base
     def generate_resizes(source_path)
       if is_image?
         generate_resize_for(Danbooru.config.small_image_width, Danbooru.config.small_image_width, source_path, 85)
-        generate_resize_for(Danbooru.config.large_image_width, nil, source_path) if image_width > Danbooru.config.large_image_width
+        generate_resize_for(Danbooru.config.large_image_width, nil, source_path) if image_width > Danbooru.config.large_image_width || is_svg? || is_mpo?
       end
     end
 
@@ -157,13 +157,21 @@ class Upload < ActiveRecord::Base
 
     # Does this file have image dimensions?
     def has_dimensions?
-      %w(jpg gif png swf).include?(file_ext)
+      %w(jpg gif png swf mpo svg).include?(file_ext)
     end
   end
   
   module ContentTypeMethods
     def is_valid_content_type?
-      file_ext =~ /jpg|gif|png|swf/
+      file_ext =~ /jpg|gif|png|swf|mpo|svg/
+    end
+
+    def is_svg?
+      file_ext =~ /svg/
+    end
+    
+    def is_mpo?
+      file_ext =~ /mpo/
     end
     
     def content_type_to_file_ext(content_type)
@@ -179,6 +187,15 @@ class Upload < ActiveRecord::Base
         
       when "application/x-shockwave-flash"
         "swf"
+        
+      when "image/svg+xml"
+        return "svg"
+        
+      # I don't really know what the MPO MIME type is, and I doubt
+      # anyone will upload the correct MIME type ANYWAY, but here
+      # goes.
+      when "image/x-mpo"
+        return "mpo"
         
       else
         "bin"
@@ -199,6 +216,12 @@ class Upload < ActiveRecord::Base
 
       when /\.swf$/
         "application/x-shockwave-flash"
+
+      when /\.svg$/
+        "image/svg+xml"
+
+      when /\.mpo$/
+        "image/x-mpo"
 
       else
         "application/octet-stream"
