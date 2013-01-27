@@ -6,7 +6,11 @@ module Danbooru
       extend ActiveSupport::Concern
       
       module ClassMethods
-        def paginate(page)
+        def paginate(page, options = {})
+          @paginator_options = options
+          
+          # connection.execute("SET statement_timeout=500")
+          
           if use_sequential_paginator?(page)
             paginate_sequential(page)
           else
@@ -52,7 +56,7 @@ module Danbooru
           page = [page.to_i, 1].max
           
           if page > Danbooru.config.max_numbered_pages
-            raise PaginationError.new("You cannot go beyond page #{Danbooru.config.max_numbered_pages}. Please narrow your search terms.")
+            raise ::Danbooru::Paginator::PaginationError.new("You cannot go beyond page #{Danbooru.config.max_numbered_pages}. Please narrow your search terms.")
           end
           
           limit(records_per_page).offset((page - 1) * records_per_page).tap do |obj|
@@ -63,16 +67,23 @@ module Danbooru
         end
         
         def records_per_page
-          # ugly hack but no easy way to pass this info down
-          Thread.current["records_per_page"] || Danbooru.config.posts_per_page
+          (@paginator_options.try(:[], :limit) || Danbooru.config.posts_per_page).to_i
         end
 
         # taken from kaminari (https://github.com/amatsuda/kaminari)
         def total_count
+          return @paginator_options[:count] if @paginator_options[:count]
+          
           c = except(:offset, :limit, :order)
           c = c.reorder(nil)
           c = c.count
           c.respond_to?(:count) ? c.count : c
+        rescue ActiveRecord::StatementInvalid => e
+          if e.to_s =~ /statement timeout/
+            1_000_000
+          else
+            raise
+          end
         end
       end
     end

@@ -7,7 +7,7 @@
     </div>
 
     <%= render "image" %>
-    <%= render "post" %>
+    <%= render "post", :post => @post %>
     <%= render "sources/info", :source => @source %>
     
     <%= form_for(@upload, :html => {:multipart => true, :class => "simple_form", :id => 'form'}) do |f| %>
@@ -50,14 +50,14 @@
         <%= button_tag "Copyrights", :id => "related-copyrights-button" %>
       </div>
       
+      <div class="input">
+        <%= submit_tag "Submit", :class => "large" %>
+      </div>
+
       <div id="related-tags-container">
         <h1>Related Tags</h1>
         <div id="related-tags">
         </div>
-      </div>
-
-      <div class="input">
-        <%= submit_tag "Submit", :class => "large" %>
       </div>
     <% end %>
   </div>

@@ -27,9 +27,9 @@ module Sources
         first_tag = @site.tags.first
         assert_equal(2, first_tag.size)
         assert(first_tag[0] =~ /./)
-        assert(first_tag[1] =~ /tags\.php\?tag=/)
+        assert(first_tag[1] =~ /search\.php/)
       end
-
+      
       should "convert a page into a json representation" do
         assert_nothing_raised do
           @site.to_json

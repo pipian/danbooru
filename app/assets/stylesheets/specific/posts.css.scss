@@ -1,9 +1,5 @@
 @import "../common/000_vars.css.scss";
 
-div.post-previews {
-  overflow: visible;
-}
-
 article.post-preview {
   height: 154px;
   width: 154px;
@@ -110,6 +106,15 @@ div#c-posts {
   }
   
   div#a-index {
+    div#posts {
+      max-width: 900px;
+      float: left;
+    }
+    
+    div#jlist-rss-ads-for-show {
+      float: right;
+    }
+    
     menu#post-sections {
       margin-bottom: 0.5em;
       font-size: $h3_size;
@@ -166,12 +171,14 @@ div#c-post-versions {
       color: green;
       text-decoration: none;
       margin-right: 0.5em;
+      word-wrap: break-word
     }
     
     del, del a {
       color: red;
       text-decoration: line-through;
       margin-right: 0.5em;
+      word-wrap: break-word
     }
   }
 }

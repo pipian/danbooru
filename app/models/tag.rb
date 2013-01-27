@@ -2,10 +2,20 @@ class Tag < ActiveRecord::Base
   attr_accessible :category
   after_save :update_category_cache
   has_one :wiki_page, :foreign_key => "name", :primary_key => "title"
-  scope :name_matches, lambda {|name| where("name LIKE ? ESCAPE E'\\\\'", name.downcase.to_escaped_for_sql_like)}
-  scope :named, lambda {|name| where("name = ?", TagAlias.to_aliased([name]).join(""))}
-  search_methods :name_matches
-
+  
+  module ApiMethods
+    def to_legacy_json
+      return {
+        "name" => name,
+        "id" => id,
+        "created_at" => created_at.strftime("%Y-%m-%d %H:%M"),
+        "count" => post_count,
+        "type" => category,
+        "ambiguous" => false
+      }.to_json
+    end
+  end
+  
   class CategoryMapping
     Danbooru.config.reverse_tag_category_mapping.each do |value, category|
       define_method(category.downcase) do
@@ -366,6 +376,43 @@ class Tag < ActiveRecord::Base
     end
   end
   
+  module SearchMethods
+    def name_matches(name)
+      where("name LIKE ? ESCAPE E'\\\\'", name.downcase.to_escaped_for_sql_like)
+    end
+    
+    def named(name)
+      where("name = ?", TagAlias.to_aliased([name]).join(""))
+    end
+    
+    def search(params)
+      q = scoped
+      return q if params.blank?
+      
+      if params[:name_matches]
+        q = q.name_matches(params[:name_matches])
+      end
+      
+      if params[:category]
+        q = q.where("category = ?", params[:category])
+      end
+      
+      case params[:sort]
+      when "count"
+        q = q.order("post_count")
+        
+      when "date"
+        q = q.order("created_at")
+
+      else
+        q = q.order("name")
+      end
+      
+      q
+    end
+  end
+  
+  include ApiMethods
   extend CountMethods
   extend ViewCountMethods
   include CategoryMethods
@@ -374,4 +421,5 @@ class Tag < ActiveRecord::Base
   extend ParseMethods
   include RelationMethods
   extend SuggestionMethods
+  extend SearchMethods
 end

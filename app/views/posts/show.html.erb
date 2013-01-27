@@ -3,6 +3,8 @@
     <aside id="sidebar">
       <%= render "posts/partials/common/search", :path => posts_path, :tags => params[:tags] %>
       
+      <%= render_advertisement("vertical") %>
+      
       <% if @post.pools.any? %>
         <section id="pool-sidebar">
           <h1>Pools</h1>
@@ -27,8 +29,8 @@
       <section>
         <h1>History</h1>
         <ul>
-          <li><%= link_to "Tags", post_versions_path(:search => {:post_id_eq => @post.id}) %></li>
-          <li><%= link_to "Notes", note_versions_path(:search => {:post_id_eq => @post.id}) %></li>
+          <li><%= fast_link_to "Tags", post_versions_path(:search => {:post_id => @post.id}) %></li>
+          <li><%= fast_link_to "Notes", note_versions_path(:search => {:post_id => @post.id}) %></li>
         </ul>
       </section>
 
@@ -36,7 +38,9 @@
 
     <section id="content">
       <%= render "posts/partials/show/notices", :post => @post %>
-
+      
+      <%= render_advertisement("horizontal") %>
+      
       <section id="image-container">
         <div id="note-container"></div>
         <%= @post.presenter.image_html(self) %>
@@ -63,19 +67,21 @@
       <section id="share" style="display: none;">
         <%= render "posts/partials/show/share", :post => @post %>
       </section>
-    </section>    
+      
+      <%= render_rss_advertisement("long", @post.rating == "e") %>
+    </section>
   </div>
 
-  <div id="flag-dialog" title="Flag Post">
-    <%= render :template => "post_flags/new" %>
+  <div id="flag-dialog" title="Flag post">
+    <%= render "post_flags/new" %>
   </div>
 
-  <div id="appeal-dialog" title="Appeal Post">
-    <%= render :template => "post_appeals/new" %>
+  <div id="appeal-dialog" title="Appeal post">
+    <%= render "post_appeals/new" %>
   </div>
   
-  <div id="add-to-pool-dialog" title="Add to Pool">
-    <%= render :template => "pool_elements/new" %>
+  <div id="add-to-pool-dialog" title="Add to pool">
+    <%= render "pool_elements/new" %>
   </div>
 </div>
 

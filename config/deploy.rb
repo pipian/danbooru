@@ -16,8 +16,8 @@ require 'whenever/capistrano'
 set :application, "danbooru"
 set :repository,  "git://github.com/r888888888/danbooru.git"
 set :scm, :git
-set :user, "danbooru"
-set :deploy_to, "/var/www/#{application}"
+set :user, "albert"
+set :deploy_to, "/var/www/danbooru2"
 
 default_run_options[:pty] = true
 
@@ -50,12 +50,18 @@ namespace :data do
   task :link_directories do
     run "rm -f #{release_path}/public/data"
     run "ln -s #{deploy_to}/shared/data #{release_path}/public/data"
+    
+    run "rm -f #{release_path}/public/ssd"
+    run "ln -s /mnt/ssd#{deploy_to}/current/public #{release_path}/public/ssd"
+    
+    run "rm -f #{release_path}/public/images/advertisements"
+    run "ln -s #{deploy_to}/shared/advertisements #{release_path}/public/images/advertisements"
   end
 end
 
 desc "Change ownership of common directory to user"
 task :reset_ownership_of_common_directory do
-  sudo "chown -R #{user}:#{user} /var/www/danbooru"
+  sudo "chown -R #{user}:#{user} /var/www/danbooru2"
 end
 
 namespace :deploy do
@@ -120,6 +126,7 @@ after "deploy:start", "delayed_job:start"
 after "deploy:stop", "delayed_job:stop"
 after "deploy:restart", "delayed_job:restart"
 before "deploy:update", "deploy:web:disable"
+after "deploy:update", "deploy:restart"
 after "deploy:restart", "deploy:precompile_assets"
 after "deploy:restart", "deploy:web:enable"
 after "delayed_job:stop", "delayed_job:kill"

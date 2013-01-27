@@ -9,6 +9,38 @@ module ApplicationHelper
     content_tag("li", link_to(text, url, options), :class => klass)
   end
   
+  def fast_link_to(text, link_params, options = {})
+    if options
+      attributes = options.map do |k, v| 
+        %{#{k}="#{h(v)}"}
+      end.join(" ")
+    else
+      attributes = ""
+    end
+    
+    if link_params.is_a?(Hash)
+      action = link_params.delete(:action)
+      controller = link_params.delete(:controller) || controller_name
+      id = link_params.delete(:id)
+      
+      link_params = link_params.map {|k, v| "#{k}=#{u(v)}"}.join("&")
+      
+      if link_params.present?
+        link_params = "?#{link_params}"
+      end
+      
+      if id
+        url = "/#{controller}/#{action}/#{id}#{link_params}"
+      else
+        url = "/#{controller}/#{action}#{link_params}"
+      end
+    else
+      url = link_params
+    end
+    
+    raw %{<a href="#{h(url)}" #{attributes}>#{text}</a>}
+  end
+  
   def format_text(text, options = {})
     DText.parse(text)
   end
@@ -28,6 +60,10 @@ module ApplicationHelper
     datetime = time.strftime("%Y-%m-%dT%H:%M" + zone[0, 3] + ":" + zone[3, 2])
     
     content_tag(:time, content || datetime, :datetime => datetime, :title => time.to_formatted_s)
+  end
+  
+  def time_ago_in_words_tagged(time)
+    raw time_tag(time_ago_in_words(time) + " ago", time)
   end
   
   def compact_time(time)
@@ -73,6 +109,11 @@ module ApplicationHelper
     options[:input_id] ||= "#{object}_#{name}"
     options[:preview_id] ||= "dtext-preview"
     submit_tag("Preview", "data-input-id" => options[:input_id], "data-preview-id" => options[:preview_id])
+  end
+  
+  def search_field(method, options = {})
+    name = options[:label] || method.titleize
+    raw '<div class="input"><label for="search_' + method + '">' + name + '</label><input type="text" name="search_' + method + '" id="search_'  + method + '"></div>'
   end
   
 protected

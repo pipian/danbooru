@@ -7,6 +7,21 @@ class JanitorTrial < ActiveRecord::Base
   validates_presence_of :user
   before_validation :initialize_creator
   
+  def self.search(params)
+    q = scoped
+    return q if params.blank?
+    
+    if params[:user_name]
+      q = q.where("user_id = (select _.id from users _ where lower(_.name) = ?)", params[:user_name].downcase)
+    end
+    
+    if params[:user_id]
+      q = q.where("user_id = ?", params[:user_id].to_i)
+    end
+    
+    q
+  end
+    
   def initialize_creator
     self.creator_id = CurrentUser.id
   end

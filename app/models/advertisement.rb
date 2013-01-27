@@ -25,7 +25,11 @@ class Advertisement < ActiveRecord::Base
   end
   
   def image_url
-    "/images/advertisements/#{file_name}"
+    "/images/advertisements/ads-#{date_prefix}/#{file_name}"
+  end
+  
+  def date_prefix
+    created_at.try(:strftime, "%Y%m%d")
   end
 
   def data_root_path
@@ -37,7 +41,7 @@ class Advertisement < ActiveRecord::Base
   end
 
   def image_path
-    "#{data_root_path}/#{rel_image_path}"
+    "#{Danbooru.config.advertisement_path}/ads-#{date_prefix}/#{file_name}"
   end
   
   def file
@@ -47,6 +51,7 @@ class Advertisement < ActiveRecord::Base
   def file=(f)
     if f.size > 0
       self.file_name = unique_identifier + File.extname(f.original_filename)
+      FileUtils.mkdir_p(File.dirname(image_path))
 
       if f.local_path
         FileUtils.cp(f.local_path, image_path)

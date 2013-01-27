@@ -14,8 +14,8 @@ group :assets do
   gem "therubyracer"
 end
 
-gem "rails", "3.2.3"
-gem "pg"
+gem "rails", "3.2.11"
+gem "pg", "0.12.2"
 gem "memcache-client", :require => "memcache"
 gem "delayed_job"
 gem "delayed_job_active_record"
@@ -23,11 +23,12 @@ gem "super_exception_notifier"
 gem "simple_form"
 gem "mechanize", :git => 'git://github.com/caribio/mechanize.git'
 gem "nokogiri"
-gem "meta_search", :git => "git://github.com/ernie/meta_search.git"
 gem "whenever", :require => false
 gem "sanitize", :git => "git://github.com/rgrove/sanitize.git"
 gem 'rmagick', :require => "RMagick"
 gem 'daemons'
+gem 'net-ssh'
+gem 'net-sftp'
 gem 'newrelic_rpm'
 
 group :development do

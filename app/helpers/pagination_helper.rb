@@ -25,6 +25,11 @@ module PaginationHelper
     
     html = '<div class="paginator"><menu>'
     window = 3
+    
+    if records.current_page >= 2
+      html << "<li>" + link_to("<<", params.merge(:page => records.current_page - 1)) + "</li>"
+    end
+    
     if records.total_pages <= (window * 2) + 5
       1.upto(records.total_pages) do |page|
         html << numbered_paginator_item(page, records.current_page)
@@ -50,6 +55,11 @@ module PaginationHelper
       html << numbered_paginator_item("...", records.current_page)
       html << numbered_paginator_final_item(records.total_pages, records.current_page)
     end
+    
+    if records.current_page < records.total_pages
+      html << "<li>" + link_to(">>", params.merge(:page => records.current_page + 1)) + "</li>"
+    end
+    
     html << "</menu></div>"
     html.html_safe
   end

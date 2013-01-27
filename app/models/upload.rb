@@ -12,9 +12,7 @@ class Upload < ActiveRecord::Base
   before_create :convert_cgi_file
   after_destroy :delete_temp_file
   validate :uploader_is_not_limited
-  scope :uploaded_by, lambda {|user_id| where(["uploader_id = ?", user_id])}
-  scope :pending, where(:status => "pending")
-  
+    
   module ValidationMethods
     def uploader_is_not_limited
       if !uploader.can_upload?
@@ -50,6 +48,11 @@ class Upload < ActiveRecord::Base
   module ConversionMethods
     def process! force=false
       return if !force && status =~ /processing|completed|error/
+      
+      if server != Socket.gethostname
+        delay.process!
+        return
+      end
       
       CurrentUser.scoped(uploader, uploader_ip_addr) do
         update_attribute(:status, "processing")
@@ -144,6 +147,10 @@ class Upload < ActiveRecord::Base
       end
 
       Danbooru.resize(source_path, resized_file_path_for(width), width, height, quality)
+
+      if width == Danbooru.config.small_image_width && Danbooru.config.ssd_path
+        Danbooru.resize(source_path, ssd_file_path, width, height, quality)
+      end
     end
   end
 
@@ -235,6 +242,11 @@ class Upload < ActiveRecord::Base
       "#{Rails.root}/public/data/#{prefix}#{md5}.#{file_ext}"
     end
     
+    def ssd_file_path
+      prefix = Rails.env == "test" ? "test." : ""
+      "#{Rails.root}/public/ssd/data/preview/#{prefix}#{md5}.#{file_ext}"
+    end
+    
     def resized_file_path_for(width)
       prefix = Rails.env == "test" ? "test." : ""
 
@@ -312,6 +324,35 @@ class Upload < ActiveRecord::Base
     end
   end
   
+  module SearchMethods
+    def uploaded_by(user_id)
+      where("uploader_id = ?", user_id)
+    end
+    
+    def pending
+      where(:status => "pending")
+    end
+    
+    def search(params)
+      q = scoped
+      return q if params.blank?
+      
+      if params[:uploader_id]
+        q = q.uploaded_by(params[:uploader_id].to_i)
+      end
+      
+      if params[:uploader_name]
+        q = q.where("uploader_id = (select _.id from users _ where lower(_.name) = ?)", params[:uploader_name].downcase)
+      end
+      
+      if params[:source]
+        q = q.where("source = ?", params[:source])
+      end
+      
+      q
+    end
+  end
+  
   include ConversionMethods
   include ValidationMethods
   include FileMethods
@@ -323,6 +364,7 @@ class Upload < ActiveRecord::Base
   include CgiFileMethods
   include StatusMethods
   include UploaderMethods
+  extend SearchMethods
   
   def presenter
     @presenter ||= UploadPresenter.new(self)

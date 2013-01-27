@@ -33,35 +33,6 @@ class Post < ActiveRecord::Base
   attr_accessible :source, :rating, :tag_string, :old_tag_string, :last_noted_at, :parent_id, :as => [:member, :privileged, :contributor, :janitor, :moderator, :admin, :default]
   attr_accessible :is_rating_locked, :is_note_locked, :as => [:janitor, :moderator, :admin]
   attr_accessible :is_status_locked, :as => [:admin]
-  scope :pending, where(["is_pending = ?", true])
-  scope :pending_or_flagged, where(["(is_pending = ? OR is_flagged = ?)", true, true])
-  scope :undeleted, where(["is_deleted = ?", false])
-  scope :deleted, where(["is_deleted = ?", true])
-  scope :visible, lambda {|user| Danbooru.config.can_user_see_post_conditions(user)}
-  scope :commented_before, lambda {|date| where("last_commented_at < ?", date).order("last_commented_at DESC")}
-  scope :has_notes, where("last_noted_at is not null")
-  scope :for_user, lambda {|user_id| where(["uploader_id = ?", user_id])}
-  scope :available_for_moderation, lambda {|hidden| hidden.present? ? where(["id IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id]) : where(["id NOT IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id])}
-  scope :hidden_from_moderation, lambda {where(["id IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id])}
-  scope :tag_match, lambda {|query| PostQueryBuilder.new(query).build}
-  scope :positive, where("score > 1")
-  scope :negative, where("score < -1")
-  scope :updater_name_matches, lambda {|name| where("updater_id = (select _.id from users _ where lower(_.name) = ?)", name.downcase)}
-  search_methods :tag_match, :updater_name_matches
-  scope :after_id, Proc.new {|num|
-    if num.present?
-      where("id > ?", num.to_i).reorder("id asc")
-    else
-      where("true")
-    end
-  }
-  scope :before_id, Proc.new {|num|
-    if num.present?
-      where("id < ?", num.to_i).reorder("id desc")
-    else
-      where("true")
-    end
-  }
     
   module FileMethods
     def distribute_files
@@ -124,7 +95,7 @@ class Post < ActiveRecord::Base
     end
     
     def ssd_preview_file_path
-      "#{Danbooru.config.ssd_path}/public/data/preview/#{file_path_preview}#{md5}.jpg"
+      "#{Danbooru.config.ssd_path}/public/data/preview/#{file_path_prefix}#{md5}.jpg"
     end
 
     def preview_file_path
@@ -639,14 +610,22 @@ class Post < ActiveRecord::Base
   
   module CountMethods
     def get_count_from_cache(tags)
-      Cache.get(count_cache_key(tags))
+      count = Cache.get(count_cache_key(tags))
+      
+      if count.nil?
+        count = select_value_sql("SELECT post_count FROM tags WHERE name = ?", tags.to_s)
+      end
+      
+      count
     end
     
-    def set_count_in_cache(tags, count)
-      if count < 100
-        expiry = 0
-      else
-        expiry = (count * 4).minutes
+    def set_count_in_cache(tags, count, expiry = nil)
+      if expiry.nil?
+        if count < 100
+          expiry = 0
+        else
+          expiry = (count * 4).minutes
+        end
       end
       
       Cache.put(count_cache_key(tags), count, expiry)
@@ -657,14 +636,27 @@ class Post < ActiveRecord::Base
     end
     
     def fast_count(tags = "")
-      tags = tags.to_s
+      tags = tags.to_s.strip
       count = get_count_from_cache(tags)
       if count.nil?
-        count = Post.tag_match(tags).undeleted.count
+        if tags.blank? && Danbooru.config.blank_tag_search_fast_count
+          count = Danbooru.config.blank_tag_search_fast_count
+        else
+          begin
+            ActiveRecord::Base.connection.execute("SET statement_timeout = 500")
+            count = Post.tag_match(tags).undeleted.count
+          rescue ActiveRecord::StatementInvalid
+            count = Danbooru.config.blank_tag_search_fast_count || 1_000_000
+          ensure
+            ActiveRecord::Base.connection.execute("SET statement_timeout = 3000")
+          end
+        end
+
         if count > Danbooru.config.posts_per_page * 10
           set_count_in_cache(tags, count)
         end
       end
+
       count
     rescue SearchError
       0
@@ -898,6 +890,103 @@ class Post < ActiveRecord::Base
     end
   end
   
+  module SearchMethods
+    def pending
+      where("is_pending = ?", true)
+    end
+    
+    def pending_or_flagged
+      where("(is_pending = ? OR is_flagged = ?)", true, true)
+    end
+    
+    def undeleted
+      where("is_deleted = ?", false)
+    end
+    
+    def deleted
+      where("is_deleted = ?", true)
+    end
+    
+    def visible(user)
+      Danbooru.config.can_user_see_post_conditions(user)
+    end
+    
+    def commented_before(date)
+      where("last_commented_at < ?", date).order("last_commented_at DESC")
+    end
+    
+    def has_notes
+      where("last_noted_at is not null")
+    end
+    
+    def for_user(user_id)
+      where("uploader_id = ?", user_id)
+    end
+    
+    def available_for_moderation(hidden)
+      if hidden.present?
+        where("id IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id)
+      else
+        where("id NOT IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id)
+      end
+    end
+    
+    def hidden_from_moderation
+      where("id IN (SELECT pd.post_id FROM post_disapprovals pd WHERE pd.user_id = ?)", CurrentUser.id)
+    end
+    
+    def tag_match(query)
+      PostQueryBuilder.new(query).build
+    end
+    
+    def positive
+      where("score > 1")
+    end
+    
+    def negative
+      where("score < -1")
+    end
+    
+    def updater_name_matches(name)
+      where("updater_id = (select _.id from users _ where lower(_.name) = ?)", name.downcase)
+    end
+    
+    def after_id(num)
+      if num.present?
+        where("id > ?", num.to_i).reorder("id asc")
+      else
+        where("true")
+      end
+    end
+    
+    def before_id(num)
+      if num.present?
+        where("id < ?", num.to_i).reorder("id desc")
+      else
+        where("true")
+      end
+    end
+    
+    def search(params)
+      q = scoped
+      return q if params.blank?
+      
+      if params[:before_id]
+        q = q.before_id(params[:before_id].to_i)
+      end
+      
+      if params[:after_id]
+        q = q.after_id(params[:after_id].to_i)
+      end
+      
+      if params[:tag_match]
+        q = q.tag_match(params[:tag_match])
+      end
+      
+      q
+    end
+  end
+  
   include FileMethods
   include ImageMethods
   include ApprovalMethods
@@ -914,6 +1003,7 @@ class Post < ActiveRecord::Base
   include VersionMethods
   include NoteMethods
   include ApiMethods
+  extend SearchMethods
   
   def reload(options = nil)
     super

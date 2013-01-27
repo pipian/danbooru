@@ -11,7 +11,18 @@ class CommentVote < ActiveRecord::Base
   validates_inclusion_of :score, :in => [-1, 1], :message => "must be 1 or -1"
   
   def self.prune!
-    destroy_all(["created_at < ?", 14.days.ago])
+    destroy_all("created_at < ?", 14.days.ago)
+  end
+  
+  def self.search(params)
+    q = scoped
+    return q if params.blank?
+    
+    if params[:comment_id]
+      q = q.where("comment_id = ?", params[:comment_id].to_i)
+    end
+    
+    q
   end
   
   def validate_user_can_vote

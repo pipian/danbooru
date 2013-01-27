@@ -1,10 +1,12 @@
 module PostSets
   class Post < Base
-    attr_reader :tag_array, :page
+    attr_reader :tag_array, :page, :per_page
     
-    def initialize(tags, page = 1)
+    def initialize(tags, page = 1, per_page = nil)
       @tag_array = Tag.scan_query(tags)
       @page = page
+      @per_page = (per_page || Danbooru.config.posts_per_page).to_i
+      @per_page = 200 if @per_page > 200
     end
     
     def tag_string
@@ -27,12 +29,16 @@ module PostSets
       end
     end
     
+    def has_explicit?
+      posts.any? {|x| x.rating == "e"}
+    end
+    
     def posts
       if tag_array.size > 2 && !CurrentUser.is_privileged?
         raise SearchError.new("Upgrade your account to search more than two tags at once")
       end
       
-      @posts ||= ::Post.tag_match(tag_string).paginate(page)
+      @posts ||= ::Post.tag_match(tag_string).paginate(page, :count => ::Post.fast_count(tag_string), :limit => per_page)
     rescue ::Post::SearchError
       @posts = ::Post.where("false")
     end
@@ -42,7 +48,7 @@ module PostSets
     end
     
     def artist
-      ::Artist.name_equals(tag_string).first
+      ::Artist.name_matches(tag_string).first
     end
     
     def is_single_tag?

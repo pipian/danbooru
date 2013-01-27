@@ -6,7 +6,7 @@ class TagSubscription < ActiveRecord::Base
   before_save :limit_tag_count
   attr_accessible :name, :tag_query, :post_ids, :is_visible_on_profile
   validates_presence_of :name, :tag_query, :is_public, :creator_id
-
+  
   def normalize_name
     self.name = name.gsub(/\W/, "_")
   end
@@ -40,6 +40,21 @@ class TagSubscription < ActiveRecord::Base
   
   def editable_by?(user)
     user.is_moderator? || creator_id == user.id
+  end
+  
+  def self.search(params)
+    q = scoped
+    return q if params.blank?
+    
+    if params[:creator_id]
+      q = q.where("creator_id = ?", params[:creator_id].to_i)
+    end
+    
+    if params[:creator_name]
+      q = q.where("creator_id = (select _.id from users _ where lower(_.name) = ?)", params[:creator_name].downcase)
+    end
+    
+    q
   end
   
   def self.visible_to(user)

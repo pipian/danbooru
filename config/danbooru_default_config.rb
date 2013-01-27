@@ -70,7 +70,7 @@ module Danbooru
     
     # Large resize image width. Set to nil to disable.
     def large_image_width
-      900
+      850
     end
     
     def large_image_prefix
@@ -84,6 +84,11 @@ module Danbooru
     
     # If a solid state drive is availble, cache the thumbnails on the SSD to reduce disk seek times.
     def ssd_path
+      nil
+    end
+    
+    # Where the ad banners are stored in the file system
+    def advertisement_path
       nil
     end
     
@@ -244,6 +249,13 @@ module Danbooru
     
     def max_appeals_per_day
       1
+    end
+    
+    # Counting every post is typically expensive because it involves a sequential scan on
+    # potentially millions of rows. If this method returns a value, then blank searches
+    # will return that number for the fast_count call instead.
+    def blank_tag_search_fast_count
+      nil
     end
     
     def pixiv_login

@@ -3,6 +3,8 @@
     <aside id="sidebar">
       <%= render "posts/partials/common/search", :path => posts_path, :tags => params[:tags] %>
 
+      <%= render_advertisement("vertical") %>
+
       <%= render "posts/partials/index/mode_menu" %>
 
       <section id="tag-box">
@@ -25,6 +27,8 @@
       <%= render "posts/partials/index/edit" %>
       <%= render "wiki_pages/excerpt", :post_set => @post_set %>
       <%= render "posts/partials/index/posts", :post_set => @post_set %>
+
+      <%= render_rss_advertisement("short", @post_set.has_explicit?) %>   
     </section>
     
     <% content_for(:page_title) do %>
@@ -35,12 +39,13 @@
       <% end %>
     <% end %>
 
-    <%= render "posts/partials/common/secondary_links" %>    
+    <%= render "posts/partials/common/secondary_links" %>
+    
   </div>
 </div>
 
 <%= content_for(:html_header) do %>
-  <%= auto_discovery_link_tag :atom, :controller => "posts", :action => "index", :format => "atom", :tags => params[:tags] %>
+  <link href="<%= posts_path(:format => 'atom', :tags => params[:tags]) %>" rel="alternate" title="ATOM" type="application/atom+xml" />
   <% if @post_set.wiki_page %>
     <meta name="description" content="<%= @post_set.wiki_page.presenter.blurb %>"></meta>
   <% end %>
