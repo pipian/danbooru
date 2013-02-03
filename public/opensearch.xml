@@ -2,6 +2,6 @@
   <ShortName>Bronibooru</ShortName>
   <Description>Bronibooru Image Search</Description>
   <InputEncoding>UTF-8</InputEncoding>
-  <Image width="16" height="16" type="image/x-icon">http://www.mlponies.com/favicon.ico</Image>
+  <Image width="16" height="16" type="image/x-icon">http://www.roundstable.com/favicon.ico</Image>
   <Url type="text/html" template="http://www.bronibooru.com/post/index?tags={searchTerms}"></Url>
 </OpenSearchDescription>
