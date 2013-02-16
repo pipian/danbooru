@@ -42,16 +42,16 @@ class Comment < ActiveRecord::Base
       q = scoped
       return q if params.blank?
       
-      if params[:body_matches]
+      if params[:body_matches] and not params[:body_matches].empty?
         q = q.body_matches(params[:body_matches])
       end
       
-      if params[:post_tags_match]
+      if params[:post_tags_match] and not params[:post_tags_match].empty?
         q = q.post_tags_match(params[:post_tags_match])
       end
       
-      if params[:creator_name]
-        q = q.for_user_name(params[:creator_name])
+      if params[:creator_name] and not params[:creator_name].empty?
+        q = q.for_creator_name(params[:creator_name])
       end
       
       if params[:creator_id]
