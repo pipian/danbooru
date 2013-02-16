@@ -39,10 +39,6 @@
       <%= render "users/sign_up_notice" %>
     <% end %>
     
-    <% if !CurrentUser.is_anonymous? && !CurrentUser.is_privileged? && cookies[:hide_upgrade_account_notice].blank? && params[:action] != "upgrade_information" %>
-      <%= render "users/upgrade_notice" %>
-    <% end %>
-    
     <%- if flash[:notice] -%>
       <div class="ui-corner-all ui-state-highlight" id="notice"><%= flash[:notice] %></div>
     <%- else -%>
