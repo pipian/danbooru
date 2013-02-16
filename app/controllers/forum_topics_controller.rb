@@ -25,7 +25,7 @@ class ForumTopicsController < ApplicationController
   
   def show
     @forum_topic = ForumTopic.find(params[:id])
-    @forum_posts = ForumPost.search(:topic_id => @forum_topic.id).order("forum_posts.id").paginate(params[:page])
+    @forum_posts = ForumPost.search(:topic_id => @forum_topic.id, :hide_deleted => hide_deleted).order("forum_posts.id").paginate(params[:page])
     respond_with(@forum_topic)
   end
   
@@ -80,5 +80,9 @@ private
     if !forum_topic.editable_by?(CurrentUser.user)
       raise User::PrivilegeError
     end
+  end
+
+  def hide_deleted
+    not CurrentUser.user.is_admin? and not CurrentUser.user.is_moderator?
   end
 end

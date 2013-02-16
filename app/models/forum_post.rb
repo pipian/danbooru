@@ -51,6 +51,10 @@ class ForumPost < ActiveRecord::Base
       if params[:creator_name]
         q = q.creator_name(params[:creator_name])
       end
+
+      if params[:hide_deleted]
+        q = q.where("is_deleted = false")
+      end
       
       q
     end
