@@ -1,0 +1,8 @@
+RewriteEngine on
+RewriteBase /
+RewriteCond %{HTTP_HOST} !^www\.bronibooru\.com [NC]
+RewriteCond %{HTTP_HOST} !^$
+RewriteRule ^(.*) http://www.bronibooru.com/$1 [L,R=permanent]
+RewriteCond %{TIME} >20120118050000
+RewriteCond %{TIME} <20120119080000
+RewriteRule $ http://www.roundstable.com/stopsopa.html [L]
