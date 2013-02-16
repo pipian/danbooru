@@ -22,7 +22,7 @@
 
       <%= @favorite_set.presenter.post_previews_html(self) %>
 
-      <%= sequential_paginator(@favorite_set.favorites) %>
+      <%= numbered_paginator(@favorite_set.favorites) %>
     </section>
     
     <% content_for(:page_title) do %>
