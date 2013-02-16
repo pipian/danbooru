@@ -1,5 +1,6 @@
 div#note-container {
-  position: absolute;
+  position: relative;
+  top: 36px;
   z-index: 500;
   
   div.note-body {
