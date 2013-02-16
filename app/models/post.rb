@@ -129,6 +129,8 @@ class Post < ActiveRecord::Base
     def preview_file_url
       if is_flash?
         return "/data/preview/150x150-flash.png"
+      elsif is_spoiler?
+        return "/data/preview/150x150-spoiler.png"
       end
       
       if Danbooru.config.ssd_path
@@ -188,6 +190,10 @@ class Post < ActiveRecord::Base
 
     def is_mpo?
       file_ext =~ /mpo/
+    end
+
+    def is_spoiler?
+      has_tag? 'spoilers(?:-\S*)?'
     end
   end
   
