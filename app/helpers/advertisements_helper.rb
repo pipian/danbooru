@@ -1,5 +1,15 @@
+require 'net/http'
+require 'net/https'
+
 module AdvertisementsHelper
   def render_advertisement(ad_type)
+    if ad_type == 'horizontal'
+      http = Net::HTTP.new('www.roundstable.com', 443)
+      http.use_ssl = true
+      request = Net::HTTP::Get.new('/buysomeapples/buysomeapples.php')
+      raw(http.request(request).body)
+    else
+
 		if Danbooru.config.can_see_ads?(CurrentUser.user)
 	    @advertisement = Advertisement.find(:first, :conditions => ["ad_type = ? AND status = 'active'", ad_type], :order => "random()")
 	    content_tag(
@@ -20,6 +30,7 @@ module AdvertisementsHelper
 		else
 			""
 		end
+    end
   end
   
   def render_rss_advertisement(short_or_long, safe)
