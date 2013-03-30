@@ -116,12 +116,8 @@ class User < ActiveRecord::Base
   end
 
   module PasswordMethods
-    def bcrypt_password
-      BCrypt::Password.new(bcrypt_password_hash)
-    end
-
-    def bcrypt_cookie_password_hash
-      bcrypt_password_hash.slice(20, 100)
+    def scrypt_cookie_password_hash
+      password_hash.slice(26, 100)
     end
 
     def encrypt_password_on_create
@@ -184,7 +180,7 @@ class User < ActiveRecord::Base
 
       def authenticate_cookie_hash(name, hash)
         user = find_by_name(name)
-        if user && user.bcrypt_cookie_password_hash == hash
+        if user && user.scrypt_cookie_password_hash == hash
           user
         else
           nil
@@ -496,7 +492,7 @@ class User < ActiveRecord::Base
 
   module ApiMethods
     def hidden_attributes
-      super + [:password_hash, :bcrypt_password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout]
+      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout]
     end
 
     def serializable_hash(options = {})
