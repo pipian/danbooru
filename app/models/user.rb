@@ -8,6 +8,7 @@ class User < ActiveRecord::Base
   module Levels
     MEMBER = 20
     PRIVILEGED = 30
+    BUILDER = 32
     CONTRIBUTOR = 33
     JANITOR = 35
     MODERATOR = 40
@@ -235,6 +236,7 @@ class User < ActiveRecord::Base
         return {
           "Member" => Levels::MEMBER,
           "Privileged" => Levels::PRIVILEGED,
+          "Builder" => Levels::BUILDER,
           "Contributor" => Levels::CONTRIBUTOR,
           "Janitor" => Levels::JANITOR,
           "Moderator" => Levels::MODERATOR,
@@ -253,7 +255,7 @@ class User < ActiveRecord::Base
     
     def role
       case level
-      when Levels::MEMBER, Levels::PRIVILEGED, Levels::CONTRIBUTOR
+      when Levels::MEMBER, Levels::PRIVILEGED, Levels::BUILDER, Levels::CONTRIBUTOR
         :member
         
       when Levels::MODERATOR, Levels::JANITOR
@@ -268,6 +270,9 @@ class User < ActiveRecord::Base
       case level
       when Levels::MEMBER
         "Member"
+        
+      when Levels::BUILDER
+        "Builder"
         
       when Levels::PRIVILEGED
         "Privileged"
@@ -292,6 +297,10 @@ class User < ActiveRecord::Base
 
     def is_member?
       true
+    end
+    
+    def is_builder?
+      level >= Levels::BUILDER
     end
     
     def is_privileged?
