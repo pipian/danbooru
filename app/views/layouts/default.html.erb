@@ -40,10 +40,6 @@
       <%= render "users/sign_up_notice" %>
     <% end %>
 
-    <% if !CurrentUser.is_anonymous? && !CurrentUser.is_privileged? && cookies[:hide_upgrade_account_notice].blank? && params[:action] != "upgrade_information" %>
-      <%= render "users/upgrade_notice" %>
-    <% end %>
-
     <% if !CurrentUser.is_privileged? && CurrentUser.user.created_at > 2.weeks.ago %>
       <%= render "users/tos" %>
     <% end %>
