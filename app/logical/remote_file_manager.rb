@@ -1,8 +1,10 @@
 class RemoteFileManager
-  attr_reader :path
+  attr_reader :path, :relpath
 
   def initialize(path)
-    @path = path
+    @path = abspath
+    @path += "/" + relpath if not relpath.nil?
+    @relpath = relpath
   end
 
   def distribute

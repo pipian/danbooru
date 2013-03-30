@@ -63,16 +63,32 @@ class Post < ActiveRecord::Base
       Rails.env == "test" ? "test." : ""
     end
 
+    def data_root_path
+      "#{Rails.root}/public/data"
+    end
+
+    def rel_file_path
+      "#{file_path_prefix}#{md5}.#{file_ext}"
+    end
+
     def file_path
       "#{data_root_path}/#{rel_file_path}"
     end
 
-    def large_file_path
+    def rel_large_file_path
       if has_large?
         "sample/#{file_path_prefix}#{Danbooru.config.large_image_prefix}#{md5}.jpg"
       else
         rel_file_path
       end
+    end
+
+    def large_file_path
+      "#{data_root_path}/#{rel_large_file_path}"
+    end
+
+    def rel_real_preview_file_path
+      "preview/#{file_path_prefix}#{md5}.jpg"
     end
 
     def real_preview_file_path
