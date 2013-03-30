@@ -121,15 +121,15 @@ class User < ActiveRecord::Base
   
   module PasswordMethods
     def encrypt_password_on_create
-      self.password_hash = SCrypt::Password.create(salt_password(password))
+      self.password_hash = SCrypt::Password.create(User.salt_password(password))
     end
     
     def encrypt_password_on_update
       return if password.blank?
       return if old_password.blank?
       
-      if SCrypt::Password.new(password_hash) == salt_password(old_password)
-        self.password_hash = SCrypt::Password.create(salt_password(password))
+      if SCrypt::Password.new(password_hash) == User.salt_password(old_password)
+        self.password_hash = SCrypt::Password.create(User.salt_password(password))
         return true
       else
         errors[:old_password] << "is incorrect"
@@ -149,7 +149,7 @@ class User < ActiveRecord::Base
 
       pass << rand(100).to_s
       update_column(:password_hash,
-                    SCrypt::Password.create(salt_password(pass)))
+                    SCrypt::Password.create(User.salt_password(pass)))
       pass    
     end
     
@@ -171,7 +171,7 @@ class User < ActiveRecord::Base
         user = where(["lower(name) = ?", name.downcase]).first
         if not user.nil?
           return (SCrypt::Password.new(user.password_hash) ==
-                  salt_password(pass))
+                  User.salt_password(pass))
         else
           # No such user!
           return false
@@ -191,10 +191,6 @@ class User < ActiveRecord::Base
       def salt_password(pass)
         "#{Danbooru.config.password_salt}--#{pass}--"
       end
-    end
-
-    def salt_password(pass)
-      "#{Danbooru.config.password_salt}--#{pass}--"
     end
 
     def cookie_password_hash
