@@ -8,7 +8,8 @@ FactoryGirl.define do
     base_upload_limit 10
     level 20
     last_logged_in_at {Time.now}
-    
+    favorite_count 0
+
     factory(:banned_user) do
       is_banned true
       ban {|x| x.association(:ban)}
@@ -16,6 +17,14 @@ FactoryGirl.define do
 
     factory(:privileged_user) do
       level 30
+    end
+
+    factory(:platinum_user) do
+      level 31
+    end
+
+    factory(:builder_user) do
+      level 32
     end
 
     factory(:contributor_user) do

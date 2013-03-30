@@ -7,29 +7,33 @@ class UserFeedbacksController < ApplicationController
     @user_feedback = UserFeedback.new(params[:user_feedback])
     respond_with(@user_feedback)
   end
-  
+
   def edit
     @user_feedback = UserFeedback.find(params[:id])
     check_privilege(@user_feedback)
     respond_with(@user_feedback)
   end
-  
+
   def show
     @user_feedback = UserFeedback.find(params[:id])
     respond_with(@user_feedback)
   end
-  
+
   def index
     @search = UserFeedback.search(params[:search])
-    @user_feedbacks = @search.paginate(params[:page]).order("id desc")
-    respond_with(@user_feedbacks)
+    @user_feedbacks = @search.paginate(params[:page]).order("created_at desc")
+    respond_with(@user_feedbacks) do |format|
+      format.xml do
+        render :xml => @user_feedbacks.to_xml(:root => "user-feedbacks")
+      end
+    end
   end
-  
+
   def create
     @user_feedback = UserFeedback.create(params[:user_feedback])
     respond_with(@user_feedback)
   end
-  
+
   def destroy
     @user_feedback = UserFeedback.find(params[:id])
     check_privilege(@user_feedback)

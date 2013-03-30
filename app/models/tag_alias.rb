@@ -1,40 +1,64 @@
 class TagAlias < ActiveRecord::Base
+  before_save :ensure_tags_exist
   after_save :clear_all_cache
-  after_save :update_cache
   after_destroy :clear_all_cache
   before_validation :initialize_creator, :on => :create
-  validates_presence_of :creator_id
+  before_validation :normalize_names
+  validates_presence_of :creator_id, :antecedent_name, :consequent_name
   validates_uniqueness_of :antecedent_name
   validate :absence_of_transitive_relation
   belongs_to :creator, :class_name => "User"
-  
+  belongs_to :forum_topic
+
   module SearchMethods
     def name_matches(name)
-      where("(antecedent_name = ? or consequent_name = ?)", name.downcase, name.downcase)
+      where("(antecedent_name like ? escape E'\\\\' or consequent_name like ? escape E'\\\\')", name.mb_chars.downcase.to_escaped_for_sql_like, name.downcase.to_escaped_for_sql_like)
     end
     
+    def active
+      where("status = ?", "active")
+    end
+
     def search(params)
       q = scoped
       return q if params.blank?
-      
-      if params[:name_matches]
+
+      if params[:name_matches].present?
         q = q.name_matches(params[:name_matches])
       end
-      
-      if params[:antecedent_name]
+
+      if params[:antecedent_name].present?
         q = q.where("antecedent_name = ?", params[:antecedent_name])
       end
 
-      if params[:id]
+      if params[:id].present?
         q = q.where("id = ?", params[:id].to_i)
       end
-      
+
       q
     end
   end
-  
+
+  module CacheMethods
+    extend ActiveSupport::Concern
+
+    module ClassMethods
+      def clear_cache_for(name)
+        Cache.delete("ta:#{Cache.sanitize(name)}")
+      end
+    end
+
+    def clear_all_cache
+      Danbooru.config.all_server_hosts.each do |host|
+        TagAlias.delay(:queue => host).clear_cache_for(antecedent_name)
+        TagAlias.delay(:queue => host).clear_cache_for(consequent_name)
+      end
+    end
+  end
+
   extend SearchMethods
-  
+  include CacheMethods
+
   def self.to_aliased(names)
     alias_hash = Cache.get_multi(names.flatten, "ta") do |name|
       ta = TagAlias.find_by_antecedent_name(name)
@@ -44,40 +68,46 @@ class TagAlias < ActiveRecord::Base
         name
       end
     end
-    
+
     alias_hash.values.flatten.uniq
   end
-  
+
   def process!
     update_column(:status, "processing")
-    update_posts
     clear_all_cache
+    ensure_category_consistency
+    update_posts
     update_column(:status, "active")
   rescue Exception => e
     update_column(:status, "error: #{e}")
   end
-  
+
   def is_pending?
     status == "pending"
   end
-  
+
   def is_active?
     status == "active"
   end
   
+  def normalize_names
+    self.antecedent_name = antecedent_name.mb_chars.downcase.tr(" ", "_")
+    self.consequent_name = consequent_name.downcase.tr(" ", "_")
+  end
+
   def initialize_creator
     self.creator_id = CurrentUser.user.id
     self.creator_ip_addr = CurrentUser.ip_addr
   end
-  
+
   def antecedent_tag
     Tag.find_by_name(antecedent_name)
   end
-  
+
   def consequent_tag
     Tag.find_by_name(consequent_name)
   end
-  
+
   def absence_of_transitive_relation
     # We don't want a -> b && b -> c chains
     if self.class.exists?(["antecedent_name = ?", consequent_name]) || self.class.exists?(["consequent_name = ?", antecedent_name])
@@ -85,33 +115,32 @@ class TagAlias < ActiveRecord::Base
       false
     end
   end
-  
-  def clear_all_cache
-    Danbooru.config.all_server_hosts.each do |host|
-      delay.clear_cache(host)
-    end
+
+  def ensure_tags_exist
+    Tag.find_or_create_by_name(antecedent_name)
+    Tag.find_or_create_by_name(consequent_name)
   end
 
-  def clear_cache(host = Socket.gethostname)
-    if host == Socket.gethostname
-      Cache.delete("ta:#{Cache.sanitize(antecedent_name)}")
+  def ensure_category_consistency
+    if antecedent_tag.category != consequent_tag.category
+      consequent_tag.update_attribute(:category, antecedent_tag.category)
     end
+
+    true
   end
-  
-  def update_cache
-    Cache.put("ta:#{Cache.sanitize(antecedent_name)}", consequent_name)
-  end
-  
+
   def update_posts
-    Post.tag_match(antecedent_name).find_each do |post|
+    Post.raw_tag_match(antecedent_name).find_each do |post|
       escaped_antecedent_name = Regexp.escape(antecedent_name)
       fixed_tags = post.tag_string.sub(/(?:\A| )#{escaped_antecedent_name}(?:\Z| )/, " #{consequent_name} ").strip
-      
       CurrentUser.scoped(creator, creator_ip_addr) do
         post.update_attributes(
           :tag_string => fixed_tags
         )
       end
     end
+
+    antecedent_tag.fix_post_count if antecedent_tag
+    consequent_tag.fix_post_count if consequent_tag
   end
 end

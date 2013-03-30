@@ -1,12 +1,10 @@
 class RemoteFileManager
-  attr_reader :path, :relpath
-  
-  def initialize(abspath, relpath)
-    @path = abspath
-    @path += "/" + relpath if not relpath.nil?
-    @relpath = relpath
+  attr_reader :path
+
+  def initialize(path)
+    @path = path
   end
-  
+
   def distribute
     Danbooru.config.other_server_hosts.each do |hostname|
       Net::SFTP.start(hostname, Danbooru.config.remote_server_login) do |ftp|
@@ -27,7 +25,7 @@ class RemoteFileManager
       end
     end
   end
-  
+
   def delete
     Danbooru.config.other_server_hosts.each do |hostname|
       Net::SFTP.start(hostname, Danbooru.config.remote_server_login) do |ftp|

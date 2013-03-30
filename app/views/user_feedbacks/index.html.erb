@@ -1,25 +1,29 @@
 <div id="c-user-feedbacks">
   <div id="a-index">
     <h1>User Feedback</h1>
-    
+
     <table class="striped" width="100%">
       <thead>
         <tr>
-          <th width="10%">Category</th>
           <th width="15%">User</th>
           <th width="15%">Creator</th>
           <th width="15%">When</th>
           <th width="45%">Message</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         <% @user_feedbacks.each do |feedback| %>
-          <tr>
-            <td><%= feedback.category %></td>
-            <td><%= link_to feedback.user_name, user_feedback_path(feedback.user_id) %></td>
-            <td><%= feedback.creator.name %></td>
-            <td><%= time_ago_in_words_tagged(feedback.created_at) %></td>
+          <tr class="feedback-category-<%= feedback.category %>">
+            <td><%= link_to feedback.user_name, user_path(feedback.user_id) %></td>
+            <td><%= link_to feedback.creator_name, user_path(feedback.creator_id) %></td>
+            <td><%= compact_time(feedback.created_at) %></td>
             <td><%= format_text(feedback.body) %></td>
+            <td>
+              <% if CurrentUser.user.is_moderator? %>
+                <%= link_to "delete", user_feedback_path(feedback), :method => :delete %>
+              <% end %>
+            </td>
           </tr>
         <% end %>
       </tbody>

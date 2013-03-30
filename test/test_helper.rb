@@ -18,7 +18,7 @@ module UploadTestMethods
   		define_method(:original_filename) {filename}
   		define_method(:content_type) {content_type}
   	end
-  	
+
   	tempfile
   end
 
@@ -33,12 +33,12 @@ end
 
 class ActionController::TestCase
   include UploadTestMethods
-  
+
   def assert_authentication_passes(action, http_method, role, params, session)
     __send__(http_method, action, params, session.merge(:user_id => @users[role].id))
     assert_response :success
   end
-  
+
   def assert_authentication_fails(action, http_method, role)
     __send__(http_method, action, params, session.merge(:user_id => @users[role].id))
     assert_redirected_to(new_sessions_path)
@@ -53,6 +53,23 @@ class MockMemcache
   def flush_all
     @memory = {}
   end
+  
+  def fetch key, expiry = 0, raw = false
+    if @memory.has_key?(key)
+      @memory[key]
+    else
+      @memory[key] = yield
+    end
+    @memory[key]
+  end
+
+  def incr key
+    @memory[key] += 1
+  end
+
+  def decr key
+    @memory[key] -= 1
+  end
 
   def set key, value, expiry = 0
     @memory[key] = value
@@ -62,7 +79,7 @@ class MockMemcache
     @memory[key]
   end
 
-  def delete key, delay
+  def delete key, delay = 0
     @memory.delete key
   end
 

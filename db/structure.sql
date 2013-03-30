@@ -345,12 +345,16 @@ CREATE FUNCTION favorites_insert_trigger() RETURNS trigger
 
 
 --
--- Name: rlike(text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sourcepattern(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION rlike(text, text) RETURNS boolean
-    LANGUAGE sql IMMUTABLE STRICT
-    AS $_$select $2 like $1$_$;
+CREATE FUNCTION sourcepattern(src text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $_$
+               BEGIN
+                 RETURN regexp_replace(src, '^[^/]*(//)?[^/]*.pixiv.net/img.*(/[^/]*/[^/]*)$', E'pixiv\\2');
+               END;
+             $_$;
 
 
 --
@@ -716,7 +720,10 @@ CREATE TABLE comments (
     ip_addr inet NOT NULL,
     body_index tsvector,
     score integer DEFAULT 0 NOT NULL,
-    updated_at timestamp without time zone
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    updater_id integer,
+    updater_ip_addr inet
 );
 
 
@@ -1964,11 +1971,9 @@ CREATE TABLE note_versions (
     width integer NOT NULL,
     height integer NOT NULL,
     body text NOT NULL,
-    updater_ip_addr inet NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    note_id integer NOT NULL,
-    post_id integer NOT NULL,
-    updater_id integer
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    version integer DEFAULT 0 NOT NULL
 );
 
 
@@ -2007,7 +2012,10 @@ CREATE TABLE notes (
     is_active boolean DEFAULT true NOT NULL,
     post_id integer NOT NULL,
     body text NOT NULL,
-    body_index tsvector
+    body_index tsvector NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    version integer DEFAULT 0 NOT NULL
 );
 
 
@@ -2278,7 +2286,7 @@ ALTER SEQUENCE post_votes_id_seq OWNED BY post_votes.id;
 CREATE TABLE posts (
     id integer NOT NULL,
     created_at timestamp without time zone NOT NULL,
-    uploader_id integer,
+    updated_at timestamp without time zone NOT NULL,
     score integer DEFAULT 0 NOT NULL,
     source text,
     md5 text NOT NULL,
@@ -2302,17 +2310,15 @@ CREATE TABLE posts (
     tag_count_artist integer DEFAULT 0 NOT NULL,
     tag_count_character integer DEFAULT 0 NOT NULL,
     tag_count_copyright integer DEFAULT 0 NOT NULL,
-    file_size integer,
-    is_status_locked boolean DEFAULT false NOT NULL,
-    fav_string text DEFAULT ''::text NOT NULL,
-    pool_string text DEFAULT ''::text NOT NULL,
-    up_score integer DEFAULT 0 NOT NULL,
-    down_score integer DEFAULT 0 NOT NULL,
-    is_pending boolean DEFAULT false NOT NULL,
-    is_flagged boolean DEFAULT false NOT NULL,
-    is_deleted boolean DEFAULT false NOT NULL,
-    tag_count integer DEFAULT 0 NOT NULL,
-    updated_at timestamp without time zone
+    file_ext character varying(255) NOT NULL,
+    file_size integer NOT NULL,
+    image_width integer NOT NULL,
+    image_height integer NOT NULL,
+    parent_id integer,
+    has_children boolean DEFAULT false NOT NULL,
+    is_banned boolean DEFAULT false NOT NULL,
+    up_score integer,
+    down_score integer
 );
 
 
@@ -2425,9 +2431,9 @@ ALTER SEQUENCE tag_implications_id_seq OWNED BY tag_implications.id;
 
 CREATE TABLE tag_subscriptions (
     creator_id integer NOT NULL,
+    name character varying(255) NOT NULL,
     tag_query text NOT NULL,
-    post_ids text DEFAULT ''::text NOT NULL,
-    name character varying(255) DEFAULT 'General'::character varying NOT NULL,
+    post_ids text NOT NULL,
     is_public boolean DEFAULT true NOT NULL,
     id integer NOT NULL,
     created_at timestamp without time zone,
@@ -2497,7 +2503,7 @@ ALTER SEQUENCE tags_id_seq OWNED BY tags.id;
 
 CREATE TABLE uploads (
     id integer NOT NULL,
-    source character varying(255),
+    source text,
     file_path character varying(255),
     content_type character varying(255),
     rating character(1) NOT NULL,
@@ -2508,9 +2514,10 @@ CREATE TABLE uploads (
     backtrace text,
     post_id integer,
     md5_confirmation character varying(255),
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    server text
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    server text,
+    parent_id integer
 );
 
 
@@ -2565,6 +2572,43 @@ CREATE SEQUENCE user_feedback_id_seq
 --
 
 ALTER SEQUENCE user_feedback_id_seq OWNED BY user_feedback.id;
+
+
+--
+-- Name: user_name_change_requests; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE user_name_change_requests (
+    id integer NOT NULL,
+    status character varying(255) DEFAULT 'pending'::character varying NOT NULL,
+    user_id integer NOT NULL,
+    approver_id integer,
+    original_name character varying(255),
+    desired_name character varying(255),
+    change_reason text,
+    rejection_reason text,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: user_name_change_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE user_name_change_requests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MAXVALUE
+    NO MINVALUE
+    CACHE 1;
+
+
+--
+-- Name: user_name_change_requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE user_name_change_requests_id_seq OWNED BY user_name_change_requests.id;
 
 
 --
@@ -2627,10 +2671,13 @@ CREATE TABLE users (
     favorite_tags text,
     blacklisted_tags text,
     time_zone character varying(255) DEFAULT 'Eastern Time (US & Canada)'::character varying NOT NULL,
-    post_update_count integer DEFAULT 0 NOT NULL,
-    note_update_count integer DEFAULT 0 NOT NULL,
-    favorite_count integer DEFAULT 0 NOT NULL,
-    post_upload_count integer DEFAULT 0 NOT NULL
+    bcrypt_password_hash text,
+    enable_post_navigation boolean DEFAULT true NOT NULL,
+    new_post_navigation_layout boolean DEFAULT true NOT NULL,
+    enable_privacy_mode boolean DEFAULT false NOT NULL,
+    enable_sequential_post_navigation boolean DEFAULT true NOT NULL,
+    per_page integer DEFAULT 20 NOT NULL,
+    hide_deleted_posts boolean DEFAULT false NOT NULL
 );
 
 
@@ -2701,7 +2748,9 @@ CREATE TABLE wiki_pages (
     body text NOT NULL,
     creator_id integer,
     is_locked boolean DEFAULT false NOT NULL,
-    body_index tsvector
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    updater_id integer
 );
 
 
@@ -3666,6 +3715,13 @@ ALTER TABLE ONLY user_feedback ALTER COLUMN id SET DEFAULT nextval('user_feedbac
 -- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
+ALTER TABLE ONLY user_name_change_requests ALTER COLUMN id SET DEFAULT nextval('user_name_change_requests_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
 ALTER TABLE ONLY user_password_reset_nonces ALTER COLUMN id SET DEFAULT nextval('user_password_reset_nonces_id_seq'::regclass);
 
 
@@ -3968,6 +4024,14 @@ ALTER TABLE ONLY uploads
 
 ALTER TABLE ONLY user_feedback
     ADD CONSTRAINT user_feedback_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_name_change_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY user_name_change_requests
+    ADD CONSTRAINT user_name_change_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -5683,6 +5747,13 @@ CREATE INDEX index_pool_versions_on_pool_id ON pool_versions USING btree (pool_i
 
 
 --
+-- Name: index_pool_versions_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_pool_versions_on_updated_at ON pool_versions USING btree (updated_at);
+
+
+--
 -- Name: index_pool_versions_on_updater_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -5704,7 +5775,14 @@ CREATE INDEX index_pools_on_creator_id ON pools USING btree (creator_id);
 
 
 --
--- Name: index_post_appeals_on_created_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+-- Name: index_pools_on_lower_name; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_pools_on_lower_name ON pools USING btree (lower((name)::text));
+
+
+--
+-- Name: index_pools_on_name; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_post_appeals_on_created_at ON post_appeals USING btree (created_at);
@@ -5771,6 +5849,13 @@ CREATE INDEX index_post_flags_on_post_id ON post_flags USING btree (post_id);
 --
 
 CREATE INDEX index_post_versions_on_post_id ON post_versions USING btree (post_id);
+
+
+--
+-- Name: index_post_versions_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_post_versions_on_updated_at ON post_versions USING btree (updated_at);
 
 
 --
@@ -5879,6 +5964,13 @@ CREATE INDEX index_posts_on_parent_id ON posts USING btree (parent_id) WHERE (pa
 
 
 --
+-- Name: index_posts_on_pixiv_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_posts_on_pixiv_id ON posts USING btree ((("substring"((source)::text, 'pixiv.net/img.*/([0-9]+)[^/]*$'::text))::integer));
+
+
+--
 -- Name: index_posts_on_source; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -5889,7 +5981,14 @@ CREATE INDEX index_posts_on_source ON posts USING btree (source);
 -- Name: index_posts_on_tag_index; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
-CREATE INDEX index_posts_on_tag_index ON posts USING gin (tag_index);
+CREATE INDEX index_posts_on_source_pattern ON posts USING btree (sourcepattern((source)::text) text_pattern_ops);
+
+
+--
+-- Name: index_posts_on_tags_index; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_posts_on_tags_index ON posts USING gin (tag_index);
 
 
 --
@@ -5963,7 +6062,14 @@ CREATE INDEX index_uploads_on_uploader_ip_addr ON uploads USING btree (uploader_
 
 
 --
--- Name: index_user_feedback_on_user_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+-- Name: index_user_feedback_on_created_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_user_feedback_on_created_at ON user_feedback USING btree (created_at);
+
+
+--
+-- Name: index_user_feedback_on_creator_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_user_feedback_on_user_id ON user_feedback USING btree (user_id);
@@ -5977,7 +6083,21 @@ CREATE INDEX index_users_on_email ON users USING btree (email) WHERE (email IS N
 
 
 --
--- Name: index_users_on_inviter_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+-- Name: index_user_name_change_requests_on_original_name; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_user_name_change_requests_on_original_name ON user_name_change_requests USING btree (original_name);
+
+
+--
+-- Name: index_user_name_change_requests_on_user_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_user_name_change_requests_on_user_id ON user_name_change_requests USING btree (user_id);
+
+
+--
+-- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_users_on_inviter_id ON users USING btree (inviter_id) WHERE (inviter_id IS NOT NULL);
@@ -6016,6 +6136,13 @@ CREATE INDEX index_wiki_pages_on_body_index ON wiki_pages USING gin (body_index)
 --
 
 CREATE UNIQUE INDEX index_wiki_pages_on_title ON wiki_pages USING btree (title);
+
+
+--
+-- Name: index_wiki_pages_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_wiki_pages_on_updated_at ON wiki_pages USING btree (updated_at);
 
 
 --
@@ -6205,3 +6332,47 @@ INSERT INTO schema_migrations (version) VALUES ('20111101212358');
 INSERT INTO schema_migrations (version) VALUES ('20130106210658');
 
 INSERT INTO schema_migrations (version) VALUES ('20130114154400');
+
+INSERT INTO schema_migrations (version) VALUES ('20130219171111');
+
+INSERT INTO schema_migrations (version) VALUES ('20130219184743');
+
+INSERT INTO schema_migrations (version) VALUES ('20130221032344');
+
+INSERT INTO schema_migrations (version) VALUES ('20130221035518');
+
+INSERT INTO schema_migrations (version) VALUES ('20130221214811');
+
+INSERT INTO schema_migrations (version) VALUES ('20130302214500');
+
+INSERT INTO schema_migrations (version) VALUES ('20130305005138');
+
+INSERT INTO schema_migrations (version) VALUES ('20130307225324');
+
+INSERT INTO schema_migrations (version) VALUES ('20130308204213');
+
+INSERT INTO schema_migrations (version) VALUES ('20130318002652');
+
+INSERT INTO schema_migrations (version) VALUES ('20130318012517');
+
+INSERT INTO schema_migrations (version) VALUES ('20130318030619');
+
+INSERT INTO schema_migrations (version) VALUES ('20130318031705');
+
+INSERT INTO schema_migrations (version) VALUES ('20130318231740');
+
+INSERT INTO schema_migrations (version) VALUES ('20130320070700');
+
+INSERT INTO schema_migrations (version) VALUES ('20130321144736');
+
+INSERT INTO schema_migrations (version) VALUES ('20130322162059');
+
+INSERT INTO schema_migrations (version) VALUES ('20130322173202');
+
+INSERT INTO schema_migrations (version) VALUES ('20130322173859');
+
+INSERT INTO schema_migrations (version) VALUES ('20130323160259');
+
+INSERT INTO schema_migrations (version) VALUES ('20130326035904');
+
+INSERT INTO schema_migrations (version) VALUES ('20130328092739');

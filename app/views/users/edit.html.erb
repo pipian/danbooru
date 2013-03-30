@@ -1,23 +1,44 @@
 <div id="c-users">
   <div id="a-edit">
     <h1>Settings</h1>
-    
+
     <%= simple_form_for @user do |f| %>
       <fieldset>
-        <% if @user.feedback.negative.count == 0 %>
-          <%= f.input :name, :as => :string %>
-        <% end %>
-
+        <legend>Basic Settings</legend>
+        
+        <div class="input">
+          <label>Name</label>
+          
+          <% if CurrentUser.user.is_privileged? %>
+            <p><%= link_to "Request a name change", new_user_name_change_request_path %></p>
+          <% else %>
+            <p>You must <%= link_to "upgrade your account", upgrade_information_users_path %> to request a name change</p>
+          <% end %>
+        </div>
         <%= f.input :email, :required => Danbooru.config.enable_email_verification?, :hint => "Used for messages and for password resets", :as => :email %>
-        <%= f.input :time_zone %>
-        <%= f.input :receive_email_notifications %>
+        <%= f.input :time_zone, :include_blank => false %>
+        <%= f.input :receive_email_notifications, :as => :select, :include_blank => false %>
         <%= f.input :comment_threshold, :hint => "Comments below this score will be hidden by default" %>
-        <%= f.input :default_image_size, :hint => "Large is #{Danbooru.config.large_image_width} pixels wide, and original is whatever the original image is", :collection => %w(large original), :include_blank => false %>
-        <%= f.input :favorite_tags, :hint => "A list of whitespace delimited tags that show up in your profile", :input_html => {:size => "40x5"} %>
-        <%= f.input :blacklisted_tags, :hint => "A list of newline delimited tags that you never want to see", :input_html => {:size => "40x5"} %>
+        <%= f.input :default_image_size, :hint => "Show original image or show resampled #{Danbooru.config.large_image_width} pixel version", :label => "Image size", :collection => %w(large original), :include_blank => false %>
+        
+        <% if CurrentUser.user.is_privileged? %>
+          <%= f.input :per_page, :label => "Posts per page", :as => :select, :collection => (1..100), :include_blank => false %>
+        <% end %>
+        
+        <%= f.input :blacklisted_tags, :hint => "Put any tag combinations you never want to see here. Each combination should go on a separate line.", :input_html => {:size => "40x5"} %>
+      </fieldset>
+      
+      <fieldset>
+        <legend>Advanced Settings</legend>
+        <%= f.input :always_resize_images, :as => :select, :include_blank => false, :label => "Fit images to window", :hint => "Use JavaScript to resize images to fit window" %>
+        <%= f.input :enable_post_navigation, :as => :select, :include_blank => false, :label => "Enable keyboard shortcuts" %>
+        <%= f.input :new_post_navigation_layout, :as => :select, :label => "Pool links", :include_blank => false, :collection => [["Bottom", "true"], ["Top", "false"]], :hint => "When browsing pools, where do you want the navigation links to be placed?" %>
+        <%= f.input :enable_sequential_post_navigation, :as => :select, :label => "Enable slideshow mode", :hint => "Show prev/next links when viewing a post", :include_blank => false %>
+        <%= f.input :hide_deleted_posts, :as => :select, :label => "Deleted post filter", :hint => "Hide deleted posts at the database level", :include_blank => false, :collection => [["Yes", "true"], ["No", "false"]] %>
       </fieldset>
 
       <fieldset>
+        <legend>Change Password</legend>
         <%= f.input :password, :hint => "Leave blank if you don't want to change your password", :label => "New password", :input_html => {:autocomplete => "off"} %>
         <%= f.input :old_password, :as => :password, :input_html => {:autocomplete => "off"} %>
       </fieldset>
