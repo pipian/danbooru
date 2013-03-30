@@ -112,7 +112,9 @@ class Post < ActiveRecord::Base
     end
 
     def preview_file_url
-      if !is_image?
+      if is_spoiler?
+        return "/images/spoiler-preview.png"
+      elsif !is_image?
         return "/images/download-preview.png"
       end
 
