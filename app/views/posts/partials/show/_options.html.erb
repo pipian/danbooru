@@ -8,7 +8,6 @@
   <% else %>
     <li><%= link_to "Add note", "#", :id => "translate", :title => "Shortcut is CTRL+N" %></li>
   <% end %>
-  <li><%= link_to "Find similar", "http://danbooru.iqdb.org/db-search.php?url=http://#{Danbooru.config.hostname}#{post.preview_file_url}" %></li>
 
   <% unless post.is_status_locked? %>
     <% if !post.is_deleted? && !post.is_pending? %>
