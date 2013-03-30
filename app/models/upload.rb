@@ -226,6 +226,15 @@ class Upload < ActiveRecord::Base
       when "application/x-shockwave-flash"
         "swf"
 
+      when "image/svg+xml"
+        "svg"
+
+      # I don't really know what the MPO MIME type is, and I doubt
+      # anyone will upload the correct MIME type ANYWAY, but here
+      # goes.
+      when "image/x-mpo"
+        "mpo"
+
       else
         "bin"
       end

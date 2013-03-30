@@ -63,3 +63,11 @@
     Resized to <%= number_to_percentage post.resize_percentage, :precision => 0 %> of original (<%= link_to "view original", post.file_url, :id => "image-resize-link" %>)
   </div>
 <% end %>
+
+<% if post.is_mpo? %>
+  <div class="ui-corner-all ui-state-highlight notice">
+    This image is an MPO file which can be displayed on a Nintendo 3DS
+    <% if !post.has_large? || CurrentUser.default_image_size != "large" %>by tapping and holding the image in the 3DS Browser<% end %>
+    (<%= link_to "learn more", wiki_pages_path(:title => "help:mpo_files") %>)
+  </div>
+<% end %>
