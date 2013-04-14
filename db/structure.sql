@@ -345,6 +345,15 @@ CREATE FUNCTION favorites_insert_trigger() RETURNS trigger
 
 
 --
+-- Name: rlike(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION rlike(text, text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $_$select $2 like $1$_$;
+
+
+--
 -- Name: sourcepattern(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -720,8 +729,7 @@ CREATE TABLE comments (
     ip_addr inet NOT NULL,
     body_index tsvector,
     score integer DEFAULT 0 NOT NULL,
-    created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone,
     updater_id integer,
     updater_ip_addr inet
 );
@@ -2003,8 +2011,11 @@ CREATE TABLE note_versions (
     width integer NOT NULL,
     height integer NOT NULL,
     body text NOT NULL,
-    created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    updater_ip_addr inet NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    note_id integer NOT NULL,
+    post_id integer NOT NULL,
+    updater_id integer,
     version integer DEFAULT 0 NOT NULL
 );
 
@@ -2044,9 +2055,7 @@ CREATE TABLE notes (
     is_active boolean DEFAULT true NOT NULL,
     post_id integer NOT NULL,
     body text NOT NULL,
-    body_index tsvector NOT NULL,
-    created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    body_index tsvector,
     version integer DEFAULT 0 NOT NULL
 );
 
@@ -2318,7 +2327,7 @@ ALTER SEQUENCE post_votes_id_seq OWNED BY post_votes.id;
 CREATE TABLE posts (
     id integer NOT NULL,
     created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    uploader_id integer,
     score integer DEFAULT 0 NOT NULL,
     source text,
     md5 text NOT NULL,
@@ -2342,15 +2351,18 @@ CREATE TABLE posts (
     tag_count_artist integer DEFAULT 0 NOT NULL,
     tag_count_character integer DEFAULT 0 NOT NULL,
     tag_count_copyright integer DEFAULT 0 NOT NULL,
-    file_ext character varying(255) NOT NULL,
-    file_size integer NOT NULL,
-    image_width integer NOT NULL,
-    image_height integer NOT NULL,
-    parent_id integer,
-    has_children boolean DEFAULT false NOT NULL,
+    file_size integer,
+    is_status_locked boolean DEFAULT false NOT NULL,
+    fav_string text DEFAULT ''::text NOT NULL,
+    pool_string text DEFAULT ''::text NOT NULL,
+    up_score integer DEFAULT 0 NOT NULL,
+    down_score integer DEFAULT 0 NOT NULL,
+    is_pending boolean DEFAULT false NOT NULL,
+    is_flagged boolean DEFAULT false NOT NULL,
+    is_deleted boolean DEFAULT false NOT NULL,
+    tag_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp without time zone,
     is_banned boolean DEFAULT false NOT NULL,
-    up_score integer,
-    down_score integer,
     pixiv_id integer
 );
 
@@ -2464,9 +2476,9 @@ ALTER SEQUENCE tag_implications_id_seq OWNED BY tag_implications.id;
 
 CREATE TABLE tag_subscriptions (
     creator_id integer NOT NULL,
-    name character varying(255) NOT NULL,
     tag_query text NOT NULL,
-    post_ids text NOT NULL,
+    post_ids text DEFAULT ''::text NOT NULL,
+    name character varying(255) DEFAULT 'General'::character varying NOT NULL,
     is_public boolean DEFAULT true NOT NULL,
     id integer NOT NULL,
     created_at timestamp without time zone,
@@ -2547,8 +2559,8 @@ CREATE TABLE uploads (
     backtrace text,
     post_id integer,
     md5_confirmation character varying(255),
-    created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
     server text,
     parent_id integer
 );
@@ -2704,7 +2716,10 @@ CREATE TABLE users (
     favorite_tags text,
     blacklisted_tags text,
     time_zone character varying(255) DEFAULT 'Eastern Time (US & Canada)'::character varying NOT NULL,
-    bcrypt_password_hash text,
+    post_update_count integer DEFAULT 0 NOT NULL,
+    note_update_count integer DEFAULT 0 NOT NULL,
+    favorite_count integer DEFAULT 0 NOT NULL,
+    post_upload_count integer DEFAULT 0 NOT NULL,
     enable_post_navigation boolean DEFAULT true NOT NULL,
     new_post_navigation_layout boolean DEFAULT true NOT NULL,
     enable_privacy_mode boolean DEFAULT false NOT NULL,
@@ -2781,8 +2796,7 @@ CREATE TABLE wiki_pages (
     body text NOT NULL,
     creator_id integer,
     is_locked boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone NOT NULL,
-    updated_at timestamp without time zone NOT NULL,
+    body_index tsvector,
     updater_id integer
 );
 
@@ -4224,13 +4238,6 @@ CREATE INDEX index_comment_votes_on_created_at ON comment_votes USING btree (cre
 --
 
 CREATE INDEX index_comment_votes_on_user_id ON comment_votes USING btree (user_id);
-
-
---
--- Name: index_comments_on_creator_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE INDEX index_comments_on_creator_id ON comments USING btree (creator_id);
 
 
 --
@@ -5725,6 +5732,13 @@ CREATE INDEX index_janitor_trials_on_creator_id ON janitor_trials USING btree (u
 
 
 --
+-- Name: index_key_values_on_key; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE UNIQUE INDEX index_key_values_on_key ON key_values USING btree (key);
+
+
+--
 -- Name: index_mod_actions_on_created_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -5736,13 +5750,6 @@ CREATE INDEX index_mod_actions_on_created_at ON mod_actions USING btree (created
 --
 
 CREATE INDEX index_mod_actions_on_creator_id ON mod_actions USING btree (creator_id);
-
-
---
--- Name: index_key_values_on_key; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE UNIQUE INDEX index_key_values_on_key ON key_values USING btree (key);
 
 
 --
@@ -5840,11 +5847,11 @@ CREATE INDEX index_pools_on_creator_id ON pools USING btree (creator_id);
 -- Name: index_pools_on_lower_name; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
-CREATE INDEX index_pools_on_lower_name ON pools USING btree (lower((name)::text));
+CREATE INDEX index_pools_on_lower_name ON pools USING btree (lower(name));
 
 
 --
--- Name: index_pools_on_name; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+-- Name: index_post_appeals_on_created_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_post_appeals_on_created_at ON post_appeals USING btree (created_at);
@@ -5963,6 +5970,13 @@ CREATE INDEX index_posts_on_approver_id ON posts USING btree (approver_id);
 
 
 --
+-- Name: index_posts_on_created_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_posts_on_created_at ON posts USING btree (created_at);
+
+
+--
 -- Name: index_posts_on_file_size; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -6033,17 +6047,17 @@ CREATE INDEX index_posts_on_source ON posts USING btree (source);
 
 
 --
+-- Name: index_posts_on_source_pattern; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_posts_on_source_pattern ON posts USING btree (sourcepattern(source) text_pattern_ops);
+
+
+--
 -- Name: index_posts_on_tag_index; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
-CREATE INDEX index_posts_on_source_pattern ON posts USING btree (sourcepattern((source)::text) text_pattern_ops);
-
-
---
--- Name: index_posts_on_tags_index; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE INDEX index_posts_on_tags_index ON posts USING gin (tag_index);
+CREATE INDEX index_posts_on_tag_index ON posts USING gin (tag_index);
 
 
 --
@@ -6124,17 +6138,10 @@ CREATE INDEX index_user_feedback_on_created_at ON user_feedback USING btree (cre
 
 
 --
--- Name: index_user_feedback_on_creator_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+-- Name: index_user_feedback_on_user_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_user_feedback_on_user_id ON user_feedback USING btree (user_id);
-
-
---
--- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE INDEX index_users_on_email ON users USING btree (email) WHERE (email IS NOT NULL);
 
 
 --
@@ -6153,6 +6160,13 @@ CREATE INDEX index_user_name_change_requests_on_user_id ON user_name_change_requ
 
 --
 -- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_users_on_email ON users USING btree (email) WHERE (email IS NOT NULL);
+
+
+--
+-- Name: index_users_on_inviter_id; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX index_users_on_inviter_id ON users USING btree (inviter_id) WHERE (inviter_id IS NOT NULL);
@@ -6191,13 +6205,6 @@ CREATE INDEX index_wiki_pages_on_body_index ON wiki_pages USING gin (body_index)
 --
 
 CREATE UNIQUE INDEX index_wiki_pages_on_title ON wiki_pages USING btree (title);
-
-
---
--- Name: index_wiki_pages_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE INDEX index_wiki_pages_on_updated_at ON wiki_pages USING btree (updated_at);
 
 
 --
@@ -6412,13 +6419,9 @@ INSERT INTO schema_migrations (version) VALUES ('20130318012517');
 
 INSERT INTO schema_migrations (version) VALUES ('20130318030619');
 
-INSERT INTO schema_migrations (version) VALUES ('20130318031705');
-
 INSERT INTO schema_migrations (version) VALUES ('20130318231740');
 
 INSERT INTO schema_migrations (version) VALUES ('20130320070700');
-
-INSERT INTO schema_migrations (version) VALUES ('20130321144736');
 
 INSERT INTO schema_migrations (version) VALUES ('20130322162059');
 

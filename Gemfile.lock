@@ -59,7 +59,6 @@ GEM
       builder
       mime-types
       xml-simple
-    bcrypt-ruby (3.0.1)
     bourne (1.4.0)
       mocha (~> 0.13.2)
     builder (3.0.4)
@@ -191,7 +190,6 @@ PLATFORMS
 DEPENDENCIES
   awesome_print
   aws-s3
-  bcrypt-ruby
   daemons
   delayed_job
   delayed_job_active_record
