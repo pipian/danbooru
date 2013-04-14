@@ -1,7 +1,7 @@
 class RemoteFileManager
   attr_reader :path, :relpath
 
-  def initialize(path)
+  def initialize(abspath, relpath)
     @path = abspath
     @path += "/" + relpath if not relpath.nil?
     @relpath = relpath
@@ -21,7 +21,7 @@ class RemoteFileManager
 
       if File.exists?(path)
         base64_md5 = Base64.encode64(Digest::MD5.digest(File.read(path)))
-        AWS::S3::S3Object.store(relpath, open(path, "rb"), Danbooru.config.amazon_s3_bucket_name, "Content-MD5" => base64_md5)
+        AWS::S3::S3Object.store(relpath, open(path, "rb"), Danbooru.config.amazon_s3_bucket_name, :access => :public_read, "Content-MD5" => base64_md5, "Cache-Control" => "max-age=315360000")
         # We can now delete the old file (since we aren't storing local)
         FileUtils.rm_f(path)
       end
