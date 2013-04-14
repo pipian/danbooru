@@ -15,13 +15,13 @@
       <tbody>
         <% @user_feedbacks.each do |feedback| %>
           <tr class="feedback-category-<%= feedback.category %>">
-            <td><%= link_to feedback.user_name, user_path(feedback.user_id) %></td>
-            <td><%= link_to feedback.creator_name, user_path(feedback.creator_id) %></td>
+            <td><%= link_to_user feedback.user %></td>
+            <td><%= link_to_user feedback.creator %></td>
             <td><%= compact_time(feedback.created_at) %></td>
             <td><%= format_text(feedback.body) %></td>
             <td>
-              <% if CurrentUser.user.is_moderator? %>
-                <%= link_to "delete", user_feedback_path(feedback), :method => :delete %>
+              <% if feedback.creator_id == CurrentUser.id || CurrentUser.is_moderator? %>
+                <%= link_to "delete", user_feedback_path(feedback), :method => :delete, :confirm => "Are you sure you want to delete this user feedback?" %>
               <% end %>
             </td>
           </tr>
@@ -36,5 +36,5 @@
 </div>
 
 <% content_for(:page_title) do %>
-  Edit Feedback - <%= Danbooru.config.app_name %>
+  Feedback - <%= Danbooru.config.app_name %>
 <% end %>

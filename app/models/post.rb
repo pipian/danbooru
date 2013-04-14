@@ -15,6 +15,7 @@ class Post < ActiveRecord::Base
   before_save :update_tag_post_counts
   before_save :set_tag_counts
   before_validation :initialize_uploader, :on => :create
+  before_validation :parse_pixiv_id
   belongs_to :updater, :class_name => "User"
   belongs_to :approver, :class_name => "User"
   belongs_to :uploader, :class_name => "User"
@@ -30,7 +31,6 @@ class Post < ActiveRecord::Base
   has_many :disapprovals, :class_name => "PostDisapproval"
   validates_uniqueness_of :md5
   validates_presence_of :parent, :if => lambda {|rec| !rec.parent_id.nil?}
-  # validate :validate_parent_does_not_have_a_parent
   attr_accessible :source, :rating, :tag_string, :old_tag_string, :last_noted_at, :parent_id, :as => [:member, :builder, :privileged, :platinum, :contributor, :janitor, :moderator, :admin, :default]
   attr_accessible :is_rating_locked, :is_note_locked, :as => [:builder, :contributor, :janitor, :moderator, :admin]
   attr_accessible :is_status_locked, :as => [:admin]
@@ -298,7 +298,6 @@ class Post < ActiveRecord::Base
       self.is_deleted = false
       self.approver_id = CurrentUser.id
       save!
-      # ModAction.create(:description => "approved post ##{id}")
     end
 
     def disapproved_by?(user)
@@ -365,8 +364,8 @@ class Post < ActiveRecord::Base
       increment_tags = tag_array - tag_array_was
       execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", decrement_tags) if decrement_tags.any?
       execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", increment_tags) if increment_tags.any?
-      Post.expire_cache_for_all(decrement_tags)
-      Post.expire_cache_for_all(increment_tags)
+      Post.expire_cache_for_all(decrement_tags) if decrement_tags.any?
+      Post.expire_cache_for_all(increment_tags) if increment_tags.any?
       Post.expire_cache_for_all([""]) if new_record? || id <= 100_000
     end
 
@@ -508,6 +507,10 @@ class Post < ActiveRecord::Base
       typed_tags("artist")
     end
 
+    def general_tags
+      typed_tags("general")
+    end
+
     def typed_tags(name)
       @typed_tags ||= {}
       @typed_tags[name] ||= begin
@@ -537,6 +540,22 @@ class Post < ActiveRecord::Base
       end
 
       return tag_array.first
+    end
+
+    def tag_string_copyright
+      copyright_tags.join(" ")
+    end
+
+    def tag_string_character
+      character_tags.join(" ")
+    end
+
+    def tag_string_artist
+      artist_tags.join(" ")
+    end
+
+    def tag_string_general
+      general_tags.join(" ")
     end
   end
 
@@ -571,6 +590,10 @@ class Post < ActiveRecord::Base
 
     def favorited_user_ids
       fav_string.scan(/\d+/)
+    end
+
+    def favorited_users
+      favorited_user_ids.map {|id| User.find_by_id(id)}
     end
   end
 
@@ -725,13 +748,13 @@ class Post < ActiveRecord::Base
     # A parent has many children. A child belongs to a parent.
     # A parent cannot have a parent.
     #
-    # After deleting a child:
+    # After expunging a child:
     # - Move favorites to parent.
     # - Does the parent have any active children?
     #   - Yes: Done.
     #   - No: Update parent's has_children flag to false.
     #
-    # After deleting a parent:
+    # After expunging a parent:
     # - Move favorites to the first child.
     # - Reparent all active children to the first active child.
 
@@ -803,15 +826,18 @@ class Post < ActiveRecord::Base
   end
 
   module DeletionMethods
-    def annihilate!
+    def expunge!
       if is_status_locked?
         self.errors.add(:is_status_locked, "; cannot delete post")
         return false
       end
 
       ModAction.create(:description => "permanently deleted post ##{id}")
-      decrement_tag_post_counts
       delete!(:without_mod_action => true)
+      give_favorites_to_parent
+      update_children_on_destroy
+      update_parent_on_destroy
+      decrement_tag_post_counts
       destroy
     end
 
@@ -826,11 +852,6 @@ class Post < ActiveRecord::Base
         update_column(:is_pending, false)
         update_column(:is_flagged, false)
         update_column(:is_banned, true) if options[:ban]
-        give_favorites_to_parent
-        update_children_on_destroy
-        update_parent_on_destroy
-        # decrement_tag_post_counts
-        update_column(:parent_id, nil)
 
         unless options[:without_mod_action]
           ModAction.create(:description => "deleted post ##{id}")
@@ -848,7 +869,6 @@ class Post < ActiveRecord::Base
       self.approver_id = CurrentUser.id
       save
       Post.expire_cache_for_all(tag_array)
-      update_parent_on_save
       ModAction.create(:description => "undeleted post ##{id}")
     end
   end
@@ -904,7 +924,7 @@ class Post < ActiveRecord::Base
       options[:except] += hidden_attributes
       unless options[:builder]
         options[:methods] ||= []
-        options[:methods] += [:uploader_name, :has_large]
+        options[:methods] += [:uploader_name, :has_large, :tag_string_artist, :tag_string_character, :tag_string_copyright, :tag_string_general]
       end
       hash = super(options)
       hash
@@ -915,6 +935,10 @@ class Post < ActiveRecord::Base
       options[:procs] ||= []
       options[:procs] << lambda {|options, record| options[:builder].tag!("uploader-name", record.uploader_name)}
       options[:procs] << lambda {|options, record| options[:builder].tag!("has-large", record.has_large?, :type => "boolean")}
+      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-artist", record.tag_string_artist)}
+      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-character", record.tag_string_character)}
+      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-copyright", record.tag_string_copyright)}
+      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-general", record.tag_string_general)}
       super(options, &block)
     end
 
@@ -1059,7 +1083,23 @@ class Post < ActiveRecord::Base
       q
     end
   end
-
+  
+  module PixivMethods
+    def parse_pixiv_id
+      if source =~ %r!http://i\d\.pixiv\.net/img-inf/img/\d+/\d+/\d+/\d+/\d+/\d+/(\d+)_s.jpg!
+        self.pixiv_id = $1
+      elsif source =~ %r!http://img\d+\.pixiv\.net/img/[^\/]+/(\d+)!
+        self.pixiv_id = $1
+      elsif source =~ %r!http://i\d\.pixiv\.net/img\d+/img/[^\/]+/(\d+)!
+        self.pixiv_id = $1
+      elsif source =~ /pixiv\.net/ && source =~ /illust_id=(\d+)/
+        self.pixiv_id = $1
+      else
+        self.pixiv_id = nil
+      end
+    end
+  end
+  
   include FileMethods
   include ImageMethods
   include ApprovalMethods
@@ -1077,6 +1117,7 @@ class Post < ActiveRecord::Base
   include NoteMethods
   include ApiMethods
   extend SearchMethods
+  include PixivMethods
 
   def reload(options = nil)
     super

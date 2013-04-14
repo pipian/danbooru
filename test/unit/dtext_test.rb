@@ -17,11 +17,11 @@ class DTextTest < ActiveSupport::TestCase
   end
 
   def test_spoilers
-    assert_equal("<p>this is</p><div class=\"spoiler\"><p>an inline spoiler</p></div><p>.</p>", p("this is [spoiler]an inline spoiler[/spoiler]."))
-    assert_equal("<p>this is</p><div class=\"spoiler\"><p>a block spoiler</p></div><p>.</p>", p("this is\n\n[spoiler]\na block spoiler\n[/spoiler]."))
-    assert_equal("<div class=\"spoiler\">\n<p>this is a spoiler with no closing tag</p>\n<p>new text</p>\n</div>", p("[spoiler]this is a spoiler with no closing tag\n\nnew text"))
-    assert_equal("<div class=\"spoiler\"><p>this is a spoiler with no closing tag<br>new text</p></div>", p("[spoiler]this is a spoiler with no closing tag\nnew text"))
-    assert_equal("<div class=\"spoiler\">\n<p>this is</p>\n<div class=\"spoiler\"><p>a nested</p></div>\n<p>spoiler</p>\n</div>", p("[spoiler]this is [spoiler]a nested[/spoiler] spoiler[/spoiler]"))
+    assert_equal("<p>this is <span class=\"spoiler\">an inline spoiler</span>.</p>", p("this is [spoiler]an inline spoiler[/spoiler]."))
+    assert_equal("<p>this is</p><p><span class=\"spoiler\"><br>a block spoiler<br></span>.</p>", p("this is\n\n[spoiler]\na block spoiler\n[/spoiler]."))
+    assert_equal("<p>[spoiler]this is a spoiler with no closing tag</p><p>new text</p>", p("[spoiler]this is a spoiler with no closing tag\n\nnew text"))
+    assert_equal("<p>[spoiler]this is a spoiler with no closing tag<br>new text</p>", p("[spoiler]this is a spoiler with no closing tag\nnew text"))
+    assert_equal("<p><span class=\"spoiler\">this is [spoiler]a nested</span> spoiler[/spoiler]</p>", p("[spoiler]this is [spoiler]a nested[/spoiler] spoiler[/spoiler]"))
   end
 
   def test_paragraphs
@@ -41,6 +41,10 @@ class DTextTest < ActiveSupport::TestCase
     assert_equal("<blockquote>\n<p>a</p>\n<blockquote><p>b</p></blockquote>\n<p>c</p>\n</blockquote>", p("[quote]\na\n[quote]\nb\n[/quote]\nc\n[/quote]"))
   end
 
+  def test_code
+    assert_equal("<pre>for (i=0; i&lt;5; ++i) {\n  printf(1);\n}\n\nexit(1);\n\n</pre>", p("[code]for (i=0; i<5; ++i) {\n  printf(1);\n}\n\nexit(1);"))
+  end
+
   def test_urls
     assert_equal('<p>a <a href="http://test.com">http://test.com</a> b</p>', p('a http://test.com b'))
     assert_equal('<p><a href="http://test.com">http://test.com</a><br>b</p>', p("http://test.com\nb"))
@@ -49,23 +53,12 @@ class DTextTest < ActiveSupport::TestCase
     assert_equal('<p>a <a href="http://test.com">http://test.com</a>. b</p>', p('a http://test.com. b'))
     assert_equal('<p>a (<a href="http://test.com">http://test.com</a>) b</p>', p('a (http://test.com) b'))
   end
-
-  # def test_links
-  #   assert_equal('<p><a href="http://test.com">test</a></p>', p('[url=http://test.com]test[/url]'))
-  #   assert_equal('<p>"1" <a href="http://two.com">2</a></p>', p('"1" [url=http://two.com]2[/url]'))
-  #   assert_equal('<p>"1" <a href="http://three.com">2 &amp; 3</a></p>', p('"1" [url=http://three.com]2 & 3[/url]'))
-  # end
-
+  
   def test_old_syle_links
     assert_equal('<p><a href="http://test.com">test</a></p>', p('"test":http://test.com'))
     assert_equal('<p>"1" <a href="http://two.com">2</a></p>', p('"1" "2":http://two.com'))
     assert_equal('<p>"1" <a href="http://three.com">2 &amp; 3</a></p>', p('"1" "2 & 3":http://three.com'))
   end
-
-  # def test_aliased_urls
-  #   assert_equal('<p>a <a href="http://test.com">bob</a>. b</p>', p('a [url=http://test.com]bob[/url]. b'))
-  #   assert_equal('<p><em><a href="http://test.com">bob</a></em></p>', p('[i][url=http://test.com]bob[/url][/i]'))
-  # end
 
   def test_lists
     assert_equal('<ul><li>a</li></ul>', p('* a'))

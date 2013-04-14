@@ -24,14 +24,16 @@
       <section>
         <h1>History</h1>
         <ul>
-          <li><%= fast_link_to "Tags", post_versions_path(:search => {:post_id => @post.id}) %></li>
+          <% if Danbooru.config.can_user_see_post?(CurrentUser.user, @post) %>
+            <li><%= fast_link_to "Tags", post_versions_path(:search => {:post_id => @post.id}) %></li>
+          <% end %>
           <li><%= fast_link_to "Notes", note_versions_path(:search => {:post_id => @post.id}) %></li>
         </ul>
       </section>
 
     </aside>
 
-    <section id="content">
+    <section id="content" class="<%= Danbooru.config.can_see_ads?(CurrentUser.user) ? "with-ads" : "without-ads" %>">
       <% if @post.presenter.has_nav_links?(self) %>
         <%= render "posts/partials/show/nav_links", :post => @post, :position => "top" %>
       <% end %>
@@ -93,7 +95,7 @@
 </div>
 
 <% content_for(:page_title) do %>
-  <%= @post.presenter.humanized_tag_string %> - <%= Danbooru.config.app_name %>
+  <%= @post.presenter.humanized_essential_tag_string %> - <%= Danbooru.config.app_name %>
 <% end %>
 
 <% content_for(:html_header) do %>

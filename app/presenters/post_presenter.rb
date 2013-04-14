@@ -55,8 +55,8 @@ class PostPresenter < Presenter
     end
 
     if @post.copyright_tags.any?
-      string << "from"
-      string << @post.copyright_tags.slice(0, 5).to_sentence
+      copytags = @post.copyright_tags.slice(0, 5).to_sentence
+      string << (@post.character_tags.any? ? "(#{copytags})" : copytags)
     end
 
     if @post.artist_tags.any?
@@ -64,12 +64,56 @@ class PostPresenter < Presenter
       string << @post.artist_tags.to_sentence
     end
 
-    string.join(" ").tr("_", " ")
+    string.empty? ? "##{@post.id}" : string.join(" ").tr("_", " ")
+  end
+
+  def categorized_tag_string
+    string = []
+
+    if @post.copyright_tags.any?
+      string << @post.copyright_tags.join(" ")
+    end
+
+    if @post.character_tags.any?
+      string << @post.character_tags.join(" ")
+    end
+
+    if @post.artist_tags.any?
+      string << @post.artist_tags.join(" ")
+    end
+
+    if @post.general_tags.any?
+      string << @post.general_tags.join(" ")
+    end
+
+    string.join(" \n")
+  end
+
+  def humanized_categorized_tag_string
+    string = []
+
+    if @post.copyright_tags.any?
+      string << @post.copyright_tags
+    end
+
+    if @post.character_tags.any?
+      string << @post.character_tags
+    end
+
+    if @post.artist_tags.any?
+      string << @post.artist_tags
+    end
+
+    if @post.general_tags.any?
+      string << @post.general_tags
+    end
+
+    string.flatten.slice(0, 25).join(", ").tr("_", " ")
   end
 
   def image_html(template)
     return template.content_tag("p", "The artist requested removal of this image") if @post.is_banned? && !CurrentUser.user.is_privileged?
-    return template.content_tag("p", "You need a privileged account to see this image.") if !Danbooru.config.can_user_see_post?(CurrentUser.user, @post)
+    return template.content_tag("p", template.link_to("You need a privileged account to see this image.", template.upgrade_information_users_path)) if !Danbooru.config.can_user_see_post?(CurrentUser.user, @post)
 
     if @post.is_flash?
       template.render("posts/partials/show/flash", :post => @post)
@@ -99,7 +143,7 @@ class PostPresenter < Presenter
       pool = Pool.where(:id => template.params[:pool_id]).first
       return if pool.nil?
       return if pool.neighbors(@post).next.nil?
-      template.link_to("Next in #{pool.name}", template.post_path(pool.neighbors(@post).next))
+      template.link_to("Next in #{pool.pretty_name}", template.post_path(pool.neighbors(@post).next))
     else
       nil
     end

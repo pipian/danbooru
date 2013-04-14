@@ -77,7 +77,7 @@ class User < ActiveRecord::Base
     module ClassMethods
       def name_to_id(name)
         Cache.get("uni:#{Cache.sanitize(name)}", 4.hours) do
-          select_value_sql("SELECT id FROM users WHERE lower(name) = ?", name.mb_chars.downcase.tr(" ", "_"))
+          select_value_sql("SELECT id FROM users WHERE lower(name) = ?", name.mb_chars.downcase.tr(" ", "_")).to_s
         end
       end
 
@@ -298,6 +298,9 @@ class User < ActiveRecord::Base
 
       when Levels::ADMIN
         "Admin"
+        
+      else
+        ""
       end
     end
 
@@ -353,6 +356,10 @@ class User < ActiveRecord::Base
       end
       
       return true
+    end
+
+    def level_class
+      "user-#{level_string.downcase}"
     end
   end
 
@@ -416,10 +423,16 @@ class User < ActiveRecord::Base
     def can_comment?
       if is_privileged?
         true
-      elsif created_at > Danbooru.config.member_comment_time_threshold
+      else
+        created_at <= Danbooru.config.member_comment_time_threshold
+      end
+    end
+
+    def is_comment_limited?
+      if is_privileged?
         false
       else
-        Comment.where("creator_id = ? and created_at > ?", id, 1.hour.ago).count < Danbooru.config.member_comment_limit
+        Comment.where("creator_id = ? and created_at > ?", id, 1.hour.ago).count >= Danbooru.config.member_comment_limit
       end
     end
 
@@ -492,7 +505,7 @@ class User < ActiveRecord::Base
 
   module ApiMethods
     def hidden_attributes
-      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout]
+      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :enable_sequential_post_navigation, :hide_deleted_posts, :per_page]
     end
 
     def serializable_hash(options = {})

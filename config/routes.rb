@@ -16,10 +16,10 @@ Danbooru::Application.routes.draw do
       resource :queue, :only => [:show]
       resource :approval, :only => [:create]
       resource :disapproval, :only => [:create]
-      resources :posts, :only => [:delete, :undelete, :annihilate, :confirm_delete] do
+      resources :posts, :only => [:delete, :undelete, :expunge, :confirm_delete] do
         member do
           get :confirm_delete
-          post :annihilate
+          post :expunge
           post :delete
           post :undelete
         end
@@ -156,7 +156,7 @@ Danbooru::Application.routes.draw do
   end
   resource :source, :only => [:show]
   resources :tags do
-    resource :correction, :only => [:new, :create], :controller => "TagCorrections"
+    resource :correction, :only => [:new, :create, :show], :controller => "TagCorrections"
     collection do
       get :search
     end
@@ -192,7 +192,6 @@ Danbooru::Application.routes.draw do
     member do
       delete :cache
       post :upgrade
-      post :restore_uploaded_tags
     end
   end
   resources :user_feedbacks
@@ -288,7 +287,7 @@ Danbooru::Application.routes.draw do
 
   match "/tag/index.xml", :controller => "legacy", :action => "tags", :format => "xml"
   match "/tag/index.json", :controller => "legacy", :action => "tags", :format => "json"
-  match "/tag" => redirect {|params, req| "/tags?page=#{req.params[:page]}&search[name_matches]=#{CGI::escape(req.params[:name].to_s)}&search[order]=#{req.params[:order]}"}
+  match "/tag" => redirect {|params, req| "/tags?page=#{req.params[:page]}&search[name_matches]=#{CGI::escape(req.params[:name].to_s)}&search[order]=#{req.params[:order]}&search[category]=#{req.params[:type]}"}
   match "/tag/index" => redirect {|params, req| "/tags?page=#{req.params[:page]}&search[name_matches]=#{CGI::escape(req.params[:name].to_s)}&search[order]=#{req.params[:order]}"}
 
   match "/tag_implication" => redirect {|params, req| "/tag_implications?search[name_matches]=#{CGI::escape(req.params[:query].to_s)}"}
@@ -312,6 +311,7 @@ Danbooru::Application.routes.draw do
   match "/static/bookmarklet" => "static#bookmarklet", :as => "bookmarklet"
   match "/static/site_map" => "static#site_map", :as => "site_map"
   match "/static/terms_of_service" => "static#terms_of_service", :as => "terms_of_service"
+  match "/static/accept_terms_of_service" => "static#accept_terms_of_service", :as => "accept_terms_of_service"
   match "/static/mrtg" => "static#mrtg", :as => "mrtg"
   match "/static/contact" => "static#contact", :as => "contact"
   match "/static/benchmark" => "static#benchmark"
