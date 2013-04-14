@@ -13,7 +13,20 @@ class PostsController < ApplicationController
     respond_with(@posts) do |format|
       format.atom
       format.xml do
-        render :xml => @posts.to_xml(:root => "posts")
+        # Fake to_xml to shim in a total_count attribute on the root.
+        require 'active_support/builder' unless defined?(Builder)
+        builder = Builder::XmlMarkup.new(:indent => 2)
+        builder.instruct!
+        root = ActiveSupport::XmlMini.rename_key("posts", {})
+        children = root.singularize
+        attributes = {:type => "array", 'total-count'.to_sym => Post.fast_count(@post_set.tag_string)}
+        return builder.tag!(root, attributes) if @posts.empty?
+        xml = builder.__send__(:method_missing, root, attributes) do
+          @posts.each { |value| ActiveSupport::XmlMini.to_tag(children, value, {:indent => 2, :builder => builder}) }
+          yield builder if block_given?
+        end
+#        render :xml => @posts.to_xml(:root => "posts")
+        render :xml => xml
       end
     end
   end
