@@ -3,8 +3,6 @@
     <aside id="sidebar">
       <%= render "posts/partials/common/search", :path => posts_path, :tags => params[:tags] %>
 
-      <%= render_advertisement("vertical") %>
-
       <section id="tag-list">
         <%= @post.presenter.split_tag_list_html(self) %>
       </section>
@@ -76,8 +74,6 @@
       <section id="share" style="display: none;">
         <%= render "posts/partials/show/share", :post => @post %>
       </section>
-
-      <%= render_rss_advertisement("long", @post.rating == "e") %>
     </section>
   </div>
 
