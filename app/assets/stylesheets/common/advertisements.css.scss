@@ -8,14 +8,23 @@
   margin-right: auto;
 }
 
+.help_fund_mlponies img {
+  width: 468px;
+  height: 60px;
+}
+
 .about_ads {
   font-size: 10pt;
   text-align: center;
 }
 
-.no_really_help_fund_mlponies {
+.help_fund_mlponies + .no_really_help_fund_mlponies {
   position: relative;
   top: -90px;
+  margin-bottom: -90px;
+}
+
+.no_really_help_fund_mlponies {
   width: 467px;
   text-align: center;
   margin-left: auto;
@@ -24,7 +33,6 @@
   font-size: 9pt;
   height: 90px;
   max-height: 90px;
-  margin-bottom: -90px;
 }
 
 .buy_some_apples {
@@ -32,4 +40,13 @@
   font-weight: bold;
   font-size: 24px;
   margin-bottom: 0;
+}
+
+.buy_some_apples img {
+  margin-bottom: -90px;
+}
+
+.no_really_help_fund_mlponies .comment {
+  width: 75%;
+  margin: auto;
 }

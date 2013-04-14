@@ -169,12 +169,10 @@ class User < ActiveRecord::Base
 
       def authenticate_pass(name, pass)
         user = find_by_name(name)
-        if not user.nil?
-          return (SCrypt::Password.new(user.password_hash) ==
-                  User.salt_password(pass))
+        if user && SCrypt::Password.new(user.password_hash) == User.salt_password(pass)
+          user
         else
-          # No such user!
-          return false
+          nil
         end
       end
 
