@@ -129,9 +129,9 @@ class Post < ActiveRecord::Base
 
     def preview_file_url
       if is_spoiler?
-        return "/images/spoiler-preview.png"
+        return "//s3.amazonaws.com/#{Danbooru.config.amazon_s3_bucket_name}/preview/spoiler.png"
       elsif !is_image?
-        return "/images/download-preview.png"
+        return "//s3.amazonaws.com/#{Danbooru.config.amazon_s3_bucket_name}/preview/download.png"
       end
 
       if Danbooru.config.ssd_path
