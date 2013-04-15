@@ -572,7 +572,7 @@ class Post < ActiveRecord::Base
       return if favorited_by?(user.id)
       append_user_to_fav_string(user.id)
       increment!(:fav_count)
-      increment!(:score) if CurrentUser.is_privileged?
+#      increment!(:score) if CurrentUser.is_privileged?
       user.add_favorite!(self)
     end
 
