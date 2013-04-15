@@ -47,4 +47,5 @@
   <% if @post_set.wiki_page %>
     <meta name="description" content="<%= @post_set.wiki_page.presenter.blurb %>"></meta>
   <% end %>
+  <%= navigation_header_links(@post_set.posts) %>
 <% end %>

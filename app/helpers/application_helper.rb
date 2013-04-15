@@ -122,6 +122,32 @@ module ApplicationHelper
     string.html_safe
   end
 
+  def navigation_header_links(post)
+    return "" if params[:before_id]
+    
+    html = []
+    
+    if post.is_a?(Post)
+      html << tag("link", :rel => "prev", :title => "Previous Post", :href => url_for(:controller => "post", :action => "show", :id => post.id - 1))
+      html << tag("link", :rel => "next", :title => "Next Post", :href => url_for(:controller => "post", :action => "show", :id => post.id + 1))
+      
+    elsif post.is_a?(Array)
+      posts = post
+      
+      if posts.current_page >= 2
+        html << tag("link", :href => url_for(params.merge(:page => 1)), :rel => "first", :title => "First Page")
+        html << tag("link", :href => url_for(params.merge(:page => posts.current_page - 1)), :rel => "prev", :title => "Previous Page")
+      end
+
+      if posts.current_page < posts.total_pages
+        html << tag("link", :href => url_for(params.merge(:page => posts.current_page + 1)), :rel => "next", :title => "Next Page")
+        html << tag("link", :href => url_for(params.merge(:page => posts.total_pages)), :rel => "last", :title => "Last Page")
+      end
+    end
+
+    return html.join("\n")
+  end 
+  
 protected
   def nav_link_match(controller, url)
     url =~ case controller
