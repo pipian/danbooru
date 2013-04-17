@@ -2328,6 +2328,9 @@ CREATE TABLE posts (
     id integer NOT NULL,
     created_at timestamp without time zone NOT NULL,
     uploader_id integer,
+    updated_at timestamp without time zone NOT NULL,
+    up_score integer DEFAULT 0 NOT NULL,
+    down_score integer DEFAULT 0 NOT NULL,
     score integer DEFAULT 0 NOT NULL,
     source text,
     md5 text NOT NULL,
@@ -6205,13 +6208,6 @@ CREATE INDEX index_wiki_pages_on_body_index ON wiki_pages USING gin (body_index)
 --
 
 CREATE UNIQUE INDEX index_wiki_pages_on_title ON wiki_pages USING btree (title);
-
-
---
--- Name: index_wiki_pages_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE INDEX index_wiki_pages_on_updated_at ON wiki_pages USING btree (updated_at);
 
 
 --

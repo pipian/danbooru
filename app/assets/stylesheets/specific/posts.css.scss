@@ -234,6 +234,10 @@ div#c-posts {
       float: right;
     }
 
+    .pool-name, .search-name {
+      word-wrap: break-word;
+    }
+
     #nav-links {
       margin: 1em 0;
       padding: 1em 0.5em;
@@ -241,6 +245,13 @@ div#c-posts {
     
     #content.with-ads {
       margin-right: 7em;
+    }
+
+    #favlist {
+      margin-left: 1.5em;
+      word-wrap: break-word;
+      max-height: 200px;
+      overflow: auto;
     }
 
     #pool-nav, #search-seq-nav, #nav-help {

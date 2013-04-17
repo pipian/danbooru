@@ -18,6 +18,7 @@
 
     if ($("#c-posts").length && $("#a-show").length) {
       this.initialize_links();
+      this.initialize_favlist();
       this.initialize_post_sections();
       this.initialize_post_image_resize_links();
       this.initialize_post_image_resize_to_window_link();
@@ -134,6 +135,25 @@
     });
   }
 
+  Danbooru.Post.initialize_favlist = function() {
+    $("#favlist").hide();
+    $("#hide-favlist-link").hide();
+
+    $("#show-favlist-link").click(function(e) {
+      $("#favlist").show();
+      $(this).hide();
+      $("#hide-favlist-link").show();
+      e.preventDefault();
+    });
+
+    $("#hide-favlist-link").click(function(e) {
+      $("#favlist").hide();
+      $(this).hide();
+      $("#show-favlist-link").show();
+      e.preventDefault();
+    });
+  }
+
   Danbooru.Post.initialize_titles = function() {
     $(".post-preview").each(function(i, v) {
       Danbooru.Post.initialize_title_for(v);
@@ -241,7 +261,7 @@
         $("#edit").show();
         $("#comments").hide();
         $("#share").hide();
-        $("#post_tag_string").focus().selectEnd();
+        $("#post_tag_string").focus().selectEnd().height($("#post_tag_string")[0].scrollHeight);
         $("#related-tags-button").trigger("click");
         $("#find-artist-button").trigger("click");
       } else {
