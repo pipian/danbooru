@@ -320,5 +320,8 @@ Danbooru::Application.routes.draw do
   match "/static/benchmark" => "static#benchmark"
   match "/static/name_change" => "static#name_change", :as => "name_change"
 
+  match "/data/:file" => redirect("//s3.amazonaws.com/bronibooru/%{file}")
+  match "/data/sample/:file" => redirect("//s3.amazonaws.com/bronibooru/sample/%{file}")
+
   root :to => "posts#index"
 end
