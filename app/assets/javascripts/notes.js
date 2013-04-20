@@ -441,14 +441,14 @@ Danbooru.Note = {
       left: x,
       top: y,
       width: w,
-      height: h
+      height: h,
+      display: 'none'
     });
 
     $("#note-container").append($note_box);
     $("#note-container").append($note_body);
     $note_body.data("original-body", text);
     Danbooru.Note.Box.scale($note_box);
-    Danbooru.Note.Box.resize_inner_border($note_box);
     Danbooru.Note.Body.set_text($note_body, text);
   },
 
@@ -488,6 +488,12 @@ Danbooru.Note = {
         $article.html()
       );
     });
+    
+    $('#note-container').css('display','none');
+    $('.note-box').each(function(i, v) {
+      $(v).css('display','block')
+    });
+    $('#note-container').css('display','block');
   }
 }
 

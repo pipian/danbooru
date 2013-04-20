@@ -18,10 +18,11 @@ class User < ActiveRecord::Base
   end
 
   attr_accessor :password, :old_password
-  attr_accessible :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :password, :old_password, :password_confirmation, :password_hash, :email, :last_logged_in_at, :last_forum_read_at, :has_mail, :receive_email_notifications, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :name, :ip_addr, :time_zone, :default_image_size, :enable_sequential_post_navigation, :per_page, :hide_deleted_posts, :as => [:moderator, :janitor, :contributor, :privileged, :member, :anonymous, :default, :builder, :admin]
+  attr_accessible :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :password, :old_password, :password_confirmation, :password_hash, :email, :last_logged_in_at, :last_forum_read_at, :has_mail, :receive_email_notifications, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :name, :ip_addr, :time_zone, :default_image_size, :enable_sequential_post_navigation, :per_page, :hide_deleted_posts, :style_usernames, :as => [:moderator, :janitor, :contributor, :privileged, :member, :anonymous, :default, :builder, :admin]
   attr_accessible :level, :as => :admin
   validates_length_of :name, :within => 2..100, :on => :create
   validates_format_of :name, :with => /\A[^\s:]+\Z/, :on => :create, :message => "cannot have whitespace or colons"
+  validates_format_of :name, :with => /\A[^_].*[^_]\Z/, :on => :create, :message => "cannot begin or end with an underscore"
   validates_uniqueness_of :name, :case_sensitive => false
   validates_uniqueness_of :email, :case_sensitive => false, :if => lambda {|rec| rec.email.present?}
   validates_length_of :password, :minimum => 5, :if => lambda {|rec| rec.new_record? || rec.password.present?}
@@ -92,12 +93,12 @@ class User < ActiveRecord::Base
       end
 
       def id_to_pretty_name(user_id)
-        id_to_name(user_id).tr("_", " ")
+        id_to_name(user_id).gsub(/([^_])_+(?=[^_])/, "\\1 \\2")
       end
     end
 
     def pretty_name
-      name.tr("_", " ")
+      name.gsub(/([^_])_+(?=[^_])/, "\\1 \\2")
     end
 
     def update_cache
@@ -201,17 +202,11 @@ class User < ActiveRecord::Base
     end
 
     def add_favorite!(post)
-      return if Favorite.for_user(id).exists?(:user_id => id, :post_id => post.id)
-      Favorite.create(:user_id => id, :post_id => post.id)
-      increment!(:favorite_count)
-      post.add_favorite!(self)
+      Favorite.add(post, self)
     end
 
     def remove_favorite!(post)
-      return unless Favorite.for_user(id).exists?(:user_id => id, :post_id => post.id)
-      Favorite.destroy_all(:user_id => id, :post_id => post.id)
-      decrement!(:favorite_count)
-      post.remove_favorite!(self)
+      Favorite.remove(post, self)
     end
   end
 
@@ -503,7 +498,7 @@ class User < ActiveRecord::Base
 
   module ApiMethods
     def hidden_attributes
-      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :enable_sequential_post_navigation, :hide_deleted_posts, :per_page]
+      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :enable_sequential_post_navigation, :hide_deleted_posts, :per_page, :style_usernames]
     end
 
     def serializable_hash(options = {})

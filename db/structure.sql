@@ -2328,9 +2328,6 @@ CREATE TABLE posts (
     id integer NOT NULL,
     created_at timestamp without time zone NOT NULL,
     uploader_id integer,
-    updated_at timestamp without time zone NOT NULL,
-    up_score integer DEFAULT 0 NOT NULL,
-    down_score integer DEFAULT 0 NOT NULL,
     score integer DEFAULT 0 NOT NULL,
     source text,
     md5 text NOT NULL,
@@ -2728,7 +2725,8 @@ CREATE TABLE users (
     enable_privacy_mode boolean DEFAULT false NOT NULL,
     enable_sequential_post_navigation boolean DEFAULT true NOT NULL,
     per_page integer DEFAULT 20 NOT NULL,
-    hide_deleted_posts boolean DEFAULT false NOT NULL
+    hide_deleted_posts boolean DEFAULT false NOT NULL,
+    style_usernames boolean DEFAULT false NOT NULL
 );
 
 
@@ -6211,6 +6209,13 @@ CREATE UNIQUE INDEX index_wiki_pages_on_title ON wiki_pages USING btree (title);
 
 
 --
+-- Name: index_wiki_pages_on_updated_at; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX index_wiki_pages_on_updated_at ON wiki_pages USING btree (updated_at);
+
+
+--
 -- Name: unique_schema_migrations; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -6438,3 +6443,5 @@ INSERT INTO schema_migrations (version) VALUES ('20130331182719');
 INSERT INTO schema_migrations (version) VALUES ('20130401013601');
 
 INSERT INTO schema_migrations (version) VALUES ('20130409191950');
+
+INSERT INTO schema_migrations (version) VALUES ('20130417221643');

@@ -26,9 +26,9 @@ class Post < ActiveRecord::Base
   has_many :versions, :class_name => "PostVersion", :dependent => :destroy, :order => "post_versions.id ASC"
   has_many :votes, :class_name => "PostVote", :dependent => :destroy
   has_many :notes, :dependent => :destroy
-  has_many :comments, :order => "comments.id"
+  has_many :comments, :order => "comments.id", :dependent => :destroy
   has_many :children, :class_name => "Post", :foreign_key => "parent_id", :order => "posts.id"
-  has_many :disapprovals, :class_name => "PostDisapproval"
+  has_many :disapprovals, :class_name => "PostDisapproval", :dependent => :destroy
   validates_uniqueness_of :md5
   validates_presence_of :parent, :if => lambda {|rec| !rec.parent_id.nil?}
   attr_accessible :source, :rating, :tag_string, :old_tag_string, :last_noted_at, :parent_id, :as => [:member, :builder, :privileged, :platinum, :contributor, :janitor, :moderator, :admin, :default]
@@ -310,6 +310,15 @@ class Post < ActiveRecord::Base
       @presenter ||= PostPresenter.new(self)
     end
 
+    def status_flags
+      flags = []
+      flags << "pending" if is_pending?
+      flags << "flagged" if is_flagged?
+      flags << "deleted" if is_deleted?
+      flags << "banned" if is_banned?
+      flags.join(" ")
+    end
+
     def pretty_rating
       case rating
       when "q"
@@ -352,18 +361,18 @@ class Post < ActiveRecord::Base
     end
 
     def increment_tag_post_counts
-      execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", tag_array) if tag_array.any?
+      Post.execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", tag_array) if tag_array.any?
     end
 
     def decrement_tag_post_counts
-      execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", tag_array) if tag_array.any?
+      Post.execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", tag_array) if tag_array.any?
     end
 
     def update_tag_post_counts
       decrement_tags = tag_array_was - tag_array
       increment_tags = tag_array - tag_array_was
-      execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", decrement_tags) if decrement_tags.any?
-      execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", increment_tags) if increment_tags.any?
+      Post.execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", decrement_tags) if decrement_tags.any?
+      Post.execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", increment_tags) if increment_tags.any?
       Post.expire_cache_for_all(decrement_tags) if decrement_tags.any?
       Post.expire_cache_for_all(increment_tags) if increment_tags.any?
       Post.expire_cache_for_all([""]) if new_record? || id <= 100_000
@@ -573,11 +582,7 @@ class Post < ActiveRecord::Base
     end
 
     def add_favorite!(user)
-      return if favorited_by?(user.id)
-      append_user_to_fav_string(user.id)
-      increment!(:fav_count)
-#      increment!(:score) if CurrentUser.is_privileged?
-      user.add_favorite!(self)
+      Favorite.add(self, user)
     end
 
     def delete_user_from_fav_string(user_id)
@@ -585,11 +590,7 @@ class Post < ActiveRecord::Base
     end
 
     def remove_favorite!(user)
-      return unless favorited_by?(user.id)
-      decrement!(:fav_count)
-      decrement!(:score) if CurrentUser.is_privileged?
-      delete_user_from_fav_string(user.id)
-      user.remove_favorite!(self)
+      Favorite.remove(self, user)
     end
 
     def favorited_user_ids
@@ -645,7 +646,7 @@ class Post < ActiveRecord::Base
 
   module VoteMethods
     def can_be_voted_by?(user)
-      !votes.exists?(["user_id = ?", user.id])
+      !PostVote.exists?(:user_id => user.id, :post_id => id)
     end
 
     def vote!(score)
