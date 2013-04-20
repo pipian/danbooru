@@ -1,4 +1,4 @@
-<div id="c-users">
+1;2c<div id="c-users">
   <div id="a-edit">
     <h1>Settings</h1>
 
@@ -9,11 +9,7 @@
         <div class="input">
           <label>Name</label>
           
-          <% if CurrentUser.user.is_privileged? %>
-            <p><%= link_to "Request a name change", new_user_name_change_request_path %></p>
-          <% else %>
-            <p>You must <%= link_to "upgrade your account", upgrade_information_users_path %> to request a name change</p>
-          <% end %>
+          <p><%= link_to "Request a name change", new_user_name_change_request_path %></p>
         </div>
         <%= f.input :email, :required => Danbooru.config.enable_email_verification?, :hint => "Used for messages and for password resets", :as => :email %>
         <%= f.input :time_zone, :include_blank => false %>
