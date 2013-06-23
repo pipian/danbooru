@@ -15,6 +15,19 @@ $(function() {
     Danbooru.Cookie.put('hide_upgrade_account_notice', '1', 7);
     e.preventDefault();
   });
+
+  $("#hide-dmail-notice").click(function(e) {
+    var $dmail_notice = $("#dmail-notice");
+    $dmail_notice.hide();
+    var dmail_id = $dmail_notice.data("id");
+    Danbooru.Cookie.put("hide_dmail_notice", dmail_id);
+    e.preventDefault();
+  });
+
+  $("#close-notice-link").click(function(e) {
+    $('#notice').fadeOut("fast");
+    e.preventDefault();
+  });
 });
 
 var Danbooru = {};

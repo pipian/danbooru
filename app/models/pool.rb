@@ -3,6 +3,7 @@ require 'ostruct'
 class Pool < ActiveRecord::Base
   validates_uniqueness_of :name
   validates_format_of :name, :with => /\A[^\s;,]+\Z/, :on => :create, :message => "cannot have whitespace, commas, or semicolons"
+  validates_inclusion_of :category, :in => %w(series collection)
   belongs_to :creator, :class_name => "User"
   belongs_to :updater, :class_name => "User"
   has_many :versions, :class_name => "PoolVersion", :dependent => :destroy, :order => "pool_versions.id ASC"
@@ -11,8 +12,9 @@ class Pool < ActiveRecord::Base
   before_validation :initialize_is_active, :on => :create
   before_validation :initialize_creator, :on => :create
   after_save :create_version
+  after_create :synchronize!
   before_destroy :create_mod_action_for_destroy
-  attr_accessible :name, :description, :post_ids, :post_id_array, :post_count, :is_active, :as => [:member, :privileged, :platinum, :contributor, :janitor, :moderator, :admin, :default]
+  attr_accessible :name, :description, :post_ids, :post_id_array, :post_count, :is_active, :category, :as => [:member, :gold, :platinum, :contributor, :janitor, :moderator, :admin, :default]
   attr_accessible :is_deleted, :as => [:janitor, :moderator, :admin]
 
   module SearchMethods
@@ -20,14 +22,26 @@ class Pool < ActiveRecord::Base
       where("is_deleted = false")
     end
 
+    def series
+      where("category = ?", "series")
+    end
+
+    def collection
+      where("category = ?", "collection")
+    end
+
+    def series_first
+      order("(case category when 'series' then 0 else 1 end), name")
+    end
+
     def search(params)
       q = scoped
       params = {} if params.blank?
 
       if params[:name_matches].present?
-        params[:name_matches] = params[:name_matches].tr(" ", "_")
-        params[:name_matches] = "*#{params[:name_matches]}*" unless params[:name_matches] =~ /\*/
-        q = q.where("name ilike ? escape E'\\\\'", params[:name_matches].to_escaped_for_sql_like)
+        name_matches = params[:name_matches].tr(" ", "_")
+        name_matches = "*#{name_matches}*" unless name_matches =~ /\*/
+        q = q.where("name ilike ? escape E'\\\\'", name_matches.to_escaped_for_sql_like)
       end
 
       if params[:description_matches].present?
@@ -48,10 +62,21 @@ class Pool < ActiveRecord::Base
         q = q.where("is_active = false")
       end
 
-      if params[:sort] == "name"
+      case params[:sort]
+      when "name"
         q = q.order("name")
+      when "created_at"
+        q = q.order("created_at desc")
+      when "post_count"
+        q = q.order("post_count desc")
       else
         q = q.order("updated_at desc")
+      end
+
+      if params[:category] == "series"
+        q = q.series
+      elsif params[:category] == "collection"
+        q = q.collection
       end
 
       q
@@ -90,7 +115,7 @@ class Pool < ActiveRecord::Base
   end
 
   def self.normalize_post_ids(post_ids)
-    post_ids.scan(/\d+/).join(" ")
+    post_ids.scan(/\d+/).uniq.join(" ")
   end
 
   def self.find_by_name(name)
@@ -120,6 +145,10 @@ class Pool < ActiveRecord::Base
     name.tr("_", " ")
   end
 
+  def pretty_category
+    category.titleize
+  end
+
   def creator_name
     User.id_to_name(creator_id)
   end
@@ -130,6 +159,7 @@ class Pool < ActiveRecord::Base
 
   def revert_to!(version)
     self.post_ids = version.post_ids
+    self.name = version.name
     synchronize!
   end
 
@@ -137,12 +167,24 @@ class Pool < ActiveRecord::Base
     post_ids =~ /(?:\A| )#{post_id}(?:\Z| )/
   end
 
+  def page_number(post_id)
+    post_id_array.find_index(post_id) + 1
+  end
+
   def deletable_by?(user)
     user.is_janitor?
   end
 
+  def create_mod_action_for_delete
+    ModAction.create(:description => "deleted pool ##{id} (name: #{name})")
+  end
+
+  def create_mod_action_for_undelete
+    ModAction.create(:description => "undeleted pool ##{id} (name: #{name})")
+  end
+
   def create_mod_action_for_destroy
-    ModAction.create(:description => "deleted pool ##{id} name=#{name} post_ids=#{post_ids}")
+    ModAction.create(:description => "permanently deleted pool ##{id} name=#{name} post_ids=#{post_ids}")
   end
 
   def add!(post)
@@ -234,13 +276,16 @@ class Pool < ActiveRecord::Base
     end
   end
 
-  def create_version
-    last_version = versions.last
+  def create_version(force = false)
+    if post_ids_changed? || name_changed? || description_changed? || is_active_changed? || is_deleted_changed? || category_changed? || force
+      last_version = versions.last
 
-    if last_version && CurrentUser.ip_addr == last_version.updater_ip_addr && CurrentUser.id == last_version.updater_id
-      last_version.update_column(:post_ids, post_ids)
-    else
-      versions.create(:post_ids => post_ids)
+      if last_version && CurrentUser.ip_addr == last_version.updater_ip_addr && CurrentUser.id == last_version.updater_id
+        last_version.update_column(:post_ids, post_ids)
+        last_version.update_column(:name, name)
+      else
+        versions.create(:post_ids => post_ids, :name => name)
+      end
     end
   end
 
@@ -259,6 +304,7 @@ class Pool < ActiveRecord::Base
 
   def serializable_hash(options = {})
     return {
+      "category" => category,
       "created_at" => created_at,
       "creator_id" => creator_id,
       "creator_name" => creator_name,

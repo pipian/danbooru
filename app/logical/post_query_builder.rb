@@ -120,7 +120,7 @@ class PostQueryBuilder
     relation = add_range_relation(q[:fav_count], "posts.fav_count", relation)
     relation = add_range_relation(q[:filesize], "posts.file_size", relation)
     relation = add_range_relation(q[:date], "posts.created_at", relation)
-    relation = add_range_relation(q[:age], "extract(epoch from (CURRENT_TIMESTAMP - posts.created_at))", relation)
+    relation = add_range_relation(q[:age], "posts.created_at", relation)
     relation = add_range_relation(q[:general_tag_count], "posts.tag_count_general", relation)
     relation = add_range_relation(q[:artist_tag_count], "posts.tag_count_artist", relation)
     relation = add_range_relation(q[:copyright_tag_count], "posts.tag_count_copyright", relation)
@@ -141,9 +141,11 @@ class PostQueryBuilder
       relation = relation.where("posts.is_deleted = TRUE")
     elsif q[:status] == "banned"
       relation = relation.where("posts.is_banned = TRUE")
+    elsif q[:status] == "active"
+      relation = relation.where("posts.is_pending = FALSE AND posts.is_deleted = FALSE AND posts.is_banned = FALSE")
     elsif q[:status] == "all" || q[:status] == "any"
       # do nothing
-    elsif q[:status_neg] == "pending" || q[:status] == "active"
+    elsif q[:status_neg] == "pending"
       relation = relation.where("posts.is_pending = FALSE")
     elsif q[:status_neg] == "flagged"
       relation = relation.where("posts.is_flagged = FALSE")
@@ -166,6 +168,20 @@ class PostQueryBuilder
         has_constraints!
       else
         relation = relation.where("SourcePattern(posts.source) LIKE SourcePattern(?) ESCAPE E'\\\\'", q[:source])
+        has_constraints!
+      end
+    end
+
+    if q[:source_neg]
+      if q[:source_neg] == "none%"
+        relation = relation.where("(posts.source != '' AND posts.source IS NOT NULL)")
+      elsif q[:source_neg] == "http%"
+        relation = relation.where("(posts.source not like ?)", "http%")
+      elsif q[:source_neg] =~ /^%\.?pixiv(?:\.net(?:\/img)?)?(?:%\/|(?=%$))(.+)$/
+        relation = relation.where("SourcePattern(posts.source) NOT LIKE ? ESCAPE E'\\\\'", "pixiv/" + $1)
+        has_constraints!
+      else
+        relation = relation.where("SourcePattern(posts.source) NOT LIKE SourcePattern(?) ESCAPE E'\\\\'", q[:source_neg])
         has_constraints!
       end
     end
@@ -193,14 +209,22 @@ class PostQueryBuilder
       has_constraints!
     end
 
-    if q[:commenter_id]
-      relation = relation.where(:id => Comment.where("creator_id = ?", q[:commenter_id]).select("post_id").uniq)
+    if q[:commenter_ids]
+      q[:commenter_ids].each do |commenter_id|
+        relation = relation.where(:id => Comment.where("creator_id = ?", commenter_id).select("post_id").uniq)
+      end
       has_constraints!
     end
 
-    if q[:noter_id]
-      relation = relation.where(:id => Note.where("creator_id = ?", q[:noter_id]).select("post_id").uniq)
+    if q[:noter_ids]
+      q[:noter_ids].each do |noter_id|
+        relation = relation.where(:id => Note.where("creator_id = ?", noter_id).select("post_id").uniq)
+      end
       has_constraints!
+    end
+
+    if q[:post_id_negated]
+      relation = relation.where("posts.id <> ?", q[:post_id_negated])
     end
 
     if q[:parent] == "none"
@@ -248,6 +272,10 @@ class PostQueryBuilder
 
     if q[:order] == "rank"
       relation = relation.where("posts.score > 0 and posts.created_at >= ?", 2.days.ago)
+    elsif q[:order] == "rank2"
+      relation = relation.where("posts.fav_count > 0 and posts.created_at >= ?", 2.days.ago)
+    elsif q[:order] == "landscape" || q[:order] == "portrait"
+      relation = relation.where("posts.image_width IS NOT NULL and posts.image_height IS NOT NULL")
     end
 
     case q[:order]
@@ -303,6 +331,9 @@ class PostQueryBuilder
 
     when "rank"
       relation = relation.order("log(3, posts.score) + (extract(epoch from posts.created_at) - extract(epoch from timestamp '2005-05-24')) / 45000 DESC")
+
+    when "rank2"
+      relation = relation.order("log(3, posts.fav_count) + (extract(epoch from posts.created_at) - extract(epoch from timestamp '2005-05-24')) / 45000 DESC")
 
     else
       relation = relation.order("posts.id DESC")

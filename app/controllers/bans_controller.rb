@@ -2,7 +2,7 @@ class BansController < ApplicationController
   before_filter :moderator_only, :except => [:show, :index]
 
   def new
-    @ban = Ban.new
+    @ban = Ban.new(params[:ban])
   end
 
   def edit
@@ -11,7 +11,7 @@ class BansController < ApplicationController
 
   def index
     @search = Ban.search(params[:search]).order("id desc")
-    @bans = @search.paginate(params[:page])
+    @bans = @search.paginate(params[:page], :limit => params[:limit])
   end
 
   def show

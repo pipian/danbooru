@@ -32,6 +32,10 @@ class AnonymousUser
     true
   end
 
+  def is_banned?
+    false
+  end
+
   def has_mail?
     false
   end
@@ -189,7 +193,15 @@ class AnonymousUser
     false
   end
 
-  %w(member banned privileged builder platinum contributor janitor moderator admin).each do |name|
+  def dmail_count
+    ""
+  end
+
+  def enable_auto_complete
+    true
+  end
+
+  %w(member banned gold builder platinum contributor janitor moderator admin).each do |name|
     define_method("is_#{name}?") do
       false
     end

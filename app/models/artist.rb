@@ -11,7 +11,8 @@ class Artist < ActiveRecord::Base
   has_one :wiki_page, :foreign_key => "title", :primary_key => "name"
   has_one :tag_alias, :foreign_key => "antecedent_name", :primary_key => "name"
   accepts_nested_attributes_for :wiki_page
-  attr_accessible :body, :name, :url_string, :other_names, :other_names_comma, :group_name, :wiki_page_attributes, :notes, :is_active, :as => [:member, :privileged, :builder, :platinum, :contributor, :janitor, :moderator, :default, :admin]
+  attr_accessible :body, :name, :url_string, :other_names, :other_names_comma, :group_name, :wiki_page_attributes, :notes, :as => [:member, :gold, :builder, :platinum, :contributor, :janitor, :moderator, :default, :admin]
+  attr_accessible :is_active, :as => [:builder, :contributor, :janitor, :moderator, :default, :admin]
   attr_accessible :is_banned, :as => :admin
 
   module UrlMethods
@@ -27,7 +28,7 @@ class Artist < ActiveRecord::Base
           u = u.to_escaped_for_sql_like.gsub(/\*/, '%') + '%'
           artists += Artist.joins(:urls).where(["artists.is_active = TRUE AND artist_urls.normalized_url LIKE ? ESCAPE E'\\\\'", u]).limit(10).order("artists.name").all
           url = File.dirname(url) + "/"
-          break if url =~ /pixiv\.net\/$/
+          break if url =~ /pixiv\.net\/(?:img\/)?$/
         end
 
         artists.uniq_by {|x| x.name}.slice(0, 20)
@@ -77,6 +78,18 @@ class Artist < ActiveRecord::Base
     def other_names_comma=(string)
       self.other_names = string.split(/,/).map {|x| Artist.normalize_name(x)}.join(" ")
     end
+
+    def rename!(new_name)
+      new_wiki_page = WikiPage.titled(new_name).first
+      if new_wiki_page
+        # Merge the old wiki page into the new one
+        new_wiki_page.update_attributes(:body => new_wiki_page.body + "\n\n" + notes)
+      elsif wiki_page
+        wiki_page.update_attribute(:title, new_name)
+      end
+      reload
+      update_attribute(:name, new_name)
+    end
   end
 
   module GroupMethods
@@ -115,7 +128,12 @@ class Artist < ActiveRecord::Base
       Artist.new.tap do |artist|
         if params[:name]
           artist.name = params[:name]
-          post = Post.tag_match("source:http #{artist.name}").first
+          if CurrentUser.user.is_gold?
+            # below gold users are limited to two tags
+            post = Post.tag_match("source:http #{artist.name} status:any").first
+          else
+            post = Post.tag_match("source:http #{artist.name}").first
+          end
           unless post.nil? || post.source.blank?
             artist.url_string = post.source
           end
@@ -143,13 +161,10 @@ class Artist < ActiveRecord::Base
 
     def notes=(msg)
       if wiki_page
-        wiki_page.title = name
         wiki_page.body = msg
-        wiki_page.save if wiki_page.body_changed?
-      else
-        if msg.present?
-          self.wiki_page = WikiPage.new(:title => name, :body => msg)
-        end
+        wiki_page.save if wiki_page.body_changed? || wiki_page.title_changed?
+      elsif msg.present?
+        self.wiki_page = WikiPage.new(:title => name, :body => msg)
       end
     end
   end
@@ -186,7 +201,6 @@ class Artist < ActiveRecord::Base
           tag_implication.delay(:queue => "default").process!
         end
 
-        update_column(:is_active, false)
         update_column(:is_banned, true)
       end
     end
@@ -303,8 +317,10 @@ class Artist < ActiveRecord::Base
   extend SearchMethods
 
   def status
-    if is_banned?
+    if is_banned? && is_active?
       "Banned"
+    elsif is_banned?
+      "Banned Deleted"
     elsif is_active?
       "Active"
     else
@@ -326,5 +342,9 @@ class Artist < ActiveRecord::Base
 
   def initialize_creator
     self.creator_id = CurrentUser.user.id
+  end
+
+  def deletable_by?(user)
+    user.is_builder?
   end
 end

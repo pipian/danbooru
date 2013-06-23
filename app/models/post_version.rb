@@ -28,6 +28,10 @@ class PostVersion < ActiveRecord::Base
         q = q.where("post_id = ?", params[:post_id].to_i)
       end
 
+      if params[:start_id].present?
+        q = q.where("id <= ?", params[:start_id].to_i)
+      end
+
       q
     end
   end
@@ -107,5 +111,32 @@ class PostVersion < ActiveRecord::Base
 
   def truncated_source
     source.gsub(/^http:\/\//, "").sub(/\/.+/, "")
+  end
+
+  def undo
+    changes = diff(previous)
+    added = changes[:added_tags] - changes[:obsolete_added_tags]
+    removed = changes[:removed_tags] - changes[:obsolete_removed_tags]
+
+    added.each do |tag|
+      if tag =~ /^source:/
+        post.source = ""
+      else
+        escaped_tag = Regexp.escape(tag)
+        post.tag_string = post.tag_string.sub(/(?:\A| )#{escaped_tag}(?:\Z| )/, " ").strip
+      end
+    end
+    removed.each do |tag|
+      if tag =~ /^source:(.+)$/
+        post.source = $1
+      else
+        post.tag_string = "#{post.tag_string} #{tag}".strip
+      end
+    end
+  end
+
+  def undo!
+    undo
+    post.save!
   end
 end

@@ -8,7 +8,7 @@ class User < ActiveRecord::Base
   module Levels
     BLOCKED = 10
     MEMBER = 20
-    PRIVILEGED = 30
+    GOLD = 30
     PLATINUM = 31
     BUILDER = 32
     CONTRIBUTOR = 33
@@ -18,7 +18,7 @@ class User < ActiveRecord::Base
   end
 
   attr_accessor :password, :old_password
-  attr_accessible :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :password, :old_password, :password_confirmation, :password_hash, :email, :last_logged_in_at, :last_forum_read_at, :has_mail, :receive_email_notifications, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :name, :ip_addr, :time_zone, :default_image_size, :enable_sequential_post_navigation, :per_page, :hide_deleted_posts, :style_usernames, :as => [:moderator, :janitor, :contributor, :privileged, :member, :anonymous, :default, :builder, :admin]
+  attr_accessible :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :password, :old_password, :password_confirmation, :password_hash, :email, :last_logged_in_at, :last_forum_read_at, :has_mail, :receive_email_notifications, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :name, :ip_addr, :time_zone, :default_image_size, :enable_sequential_post_navigation, :per_page, :hide_deleted_posts, :style_usernames, :enable_auto_complete, :as => [:moderator, :janitor, :contributor, :gold, :member, :anonymous, :default, :builder, :admin]
   attr_accessible :level, :as => :admin
   validates_length_of :name, :within => 2..100, :on => :create
   validates_format_of :name, :with => /\A[^\s:]+\Z/, :on => :create, :message => "cannot have whitespace or colons"
@@ -41,7 +41,8 @@ class User < ActiveRecord::Base
   before_create :promote_to_admin_if_first_user
   has_many :feedback, :class_name => "UserFeedback", :dependent => :destroy
   has_many :posts, :foreign_key => "uploader_id"
-  has_one :ban
+  has_many :bans, :order => "bans.id desc"
+  has_one :recent_ban, :class_name => "Ban", :order => "bans.id desc"
   has_many :subscriptions, :class_name => "TagSubscription", :foreign_key => "creator_id", :order => "name"
   has_many :note_versions, :foreign_key => "updater_id"
   has_many :dmails, :foreign_key => "owner_id", :order => "dmails.id desc"
@@ -78,7 +79,7 @@ class User < ActiveRecord::Base
     module ClassMethods
       def name_to_id(name)
         Cache.get("uni:#{Cache.sanitize(name)}", 4.hours) do
-          select_value_sql("SELECT id FROM users WHERE lower(name) = ?", name.mb_chars.downcase.tr(" ", "_")).to_s
+          select_value_sql("SELECT id FROM users WHERE lower(name) = ?", name.mb_chars.downcase.tr(" ", "_").to_s)
         end
       end
 
@@ -201,8 +202,17 @@ class User < ActiveRecord::Base
       Favorite.where("user_id % 100 = #{id % 100} and user_id = #{id}").order("id desc")
     end
 
+    def clean_favorite_count?
+      favorite_count < 0 || rand(100) < [Math.log(favorite_count, 2), 5].min
+    end
+
+    def clean_favorite_count!
+      update_column(:favorite_count, Favorite.for_user(id).count)
+    end
+
     def add_favorite!(post)
       Favorite.add(post, self)
+      clean_favorite_count! if clean_favorite_count?
     end
 
     def remove_favorite!(post)
@@ -217,7 +227,7 @@ class User < ActiveRecord::Base
       def level_hash
         return {
           "Member" => Levels::MEMBER,
-          "Gold" => Levels::PRIVILEGED,
+          "Gold" => Levels::GOLD,
           "Platinum" => Levels::PLATINUM,
           "Builder" => Levels::BUILDER,
           "Contributor" => Levels::CONTRIBUTOR,
@@ -226,6 +236,10 @@ class User < ActiveRecord::Base
           "Admin" => Levels::ADMIN
         }
       end
+    end
+
+    def promote_to(level)
+      update_attributes({:level => level}, :as => :admin)
     end
 
     def promote_to_admin_if_first_user
@@ -243,8 +257,8 @@ class User < ActiveRecord::Base
       when Levels::MEMBER
         :member
 
-      when Levels::PRIVILEGED
-        :privileged
+      when Levels::GOLD
+        :gold
 
       when Levels::BUILDER
         :builder
@@ -274,7 +288,7 @@ class User < ActiveRecord::Base
       when Levels::BUILDER
         "Builder"
 
-      when Levels::PRIVILEGED
+      when Levels::GOLD
         "Gold"
 
       when Levels::PLATINUM
@@ -309,8 +323,8 @@ class User < ActiveRecord::Base
       level >= Levels::BUILDER
     end
 
-    def is_privileged?
-      level >= Levels::PRIVILEGED
+    def is_gold?
+      level >= Levels::GOLD
     end
 
     def is_platinum?
@@ -339,12 +353,12 @@ class User < ActiveRecord::Base
 
     def create_mod_action
       if level_changed?
-        ModAction.create(:description => "#{name} level changed #{level_string(level_was)} -> #{level_string} by #{CurrentUser.name}")
+        ModAction.create(:description => %{"#{name}":/users/#{id} level changed #{level_string(level_was)} -> #{level_string}})
       end
     end
     
     def set_per_page
-      if per_page.nil? || !is_privileged?
+      if per_page.nil? || !is_gold?
         self.per_page = Danbooru.config.posts_per_page
       end
       
@@ -386,7 +400,7 @@ class User < ActiveRecord::Base
 
   module ForumMethods
     def has_forum_been_updated?
-      return false unless is_privileged?
+      return false unless is_gold?
       newest_topic = ForumTopic.order("updated_at desc").first
       return false if newest_topic.nil?
       return true if last_forum_read_at.nil?
@@ -414,7 +428,7 @@ class User < ActiveRecord::Base
     end
 
     def can_comment?
-      if is_privileged?
+      if is_gold?
         true
       else
         created_at <= Danbooru.config.member_comment_time_threshold
@@ -422,7 +436,7 @@ class User < ActiveRecord::Base
     end
 
     def is_comment_limited?
-      if is_privileged?
+      if is_gold?
         false
       else
         Comment.where("creator_id = ? and created_at > ?", id, 1.hour.ago).count >= Danbooru.config.member_comment_limit
@@ -458,7 +472,7 @@ class User < ActiveRecord::Base
     def tag_query_limit
       if is_platinum?
         Danbooru.config.base_tag_query_limit * 2
-      elsif is_privileged?
+      elsif is_gold?
         Danbooru.config.base_tag_query_limit
       else
         2
@@ -468,7 +482,7 @@ class User < ActiveRecord::Base
     def favorite_limit
       if is_platinum?
         nil
-      elsif is_privileged?
+      elsif is_gold?
         20_000
       else
         10_000
@@ -478,7 +492,7 @@ class User < ActiveRecord::Base
     def api_hourly_limit
       if is_platinum?
         20_000
-      elsif is_privileged?
+      elsif is_gold?
         10_000
       else
         3_000
@@ -488,7 +502,7 @@ class User < ActiveRecord::Base
     def statement_timeout
       if is_platinum?
         9_000
-      elsif is_privileged?
+      elsif is_gold?
         6_000
       else
         3_000
@@ -498,13 +512,15 @@ class User < ActiveRecord::Base
 
   module ApiMethods
     def hidden_attributes
-      super + [:password_hash, :email, :email_verification_key, :time_zone, :created_at, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :base_upload_limit, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :enable_sequential_post_navigation, :hide_deleted_posts, :per_page, :style_usernames]
+      super + [:password_hash, :email, :email_verification_key, :time_zone, :updated_at, :receive_email_notifications, :last_logged_in_at, :last_forum_read_at, :has_mail, :default_image_size, :comment_threshold, :always_resize_images, :favorite_tags, :blacklisted_tags, :recent_tags, :enable_privacy_mode, :enable_post_navigation, :new_post_navigation_layout, :enable_sequential_post_navigation, :hide_deleted_posts, :per_page, :style_usernames, :enable_auto_complete]
     end
 
     def serializable_hash(options = {})
       options ||= {}
       options[:except] ||= []
       options[:except] += hidden_attributes
+      options[:methods] ||= []
+      options[:methods] += [:wiki_page_version_count, :artist_version_count, :pool_version_count, :forum_post_count, :comment_count, :positive_feedback_count, :neutral_feedback_count, :negative_feedback_count]
       super(options)
     end
 
@@ -513,6 +529,8 @@ class User < ActiveRecord::Base
       options ||= {}
       options[:except] ||= []
       options[:except] += hidden_attributes
+      options[:methods] ||= []
+      options[:methods] += [:wiki_page_version_count, :artist_version_count, :pool_version_count, :forum_post_count, :comment_count, :positive_feedback_count, :neutral_feedback_count, :negative_feedback_count]
       super(options, &block)
     end
 
@@ -523,6 +541,40 @@ class User < ActiveRecord::Base
         "level" => level,
         "created_at" => created_at.strftime("%Y-%m-%d %H:%M")
       }.to_json
+    end
+  end
+
+  module CountMethods
+    def wiki_page_version_count
+      WikiPageVersion.for_user(id).count
+    end
+
+    def artist_version_count
+      ArtistVersion.for_user(id).count
+    end
+
+    def pool_version_count
+      PoolVersion.for_user(id).count
+    end
+
+    def forum_post_count
+      ForumPost.for_user(id).count
+    end
+
+    def comment_count
+      Comment.for_creator(id).count
+    end
+
+    def positive_feedback_count
+      feedback.positive.count
+    end
+
+    def neutral_feedback_count
+      feedback.neutral.count
+    end
+
+    def negative_feedback_count
+      feedback.negative.count
     end
   end
 
@@ -560,15 +612,19 @@ class User < ActiveRecord::Base
       return q if params.blank?
 
       if params[:name].present?
-        q = q.name_matches(params[:name].mb_chars.downcase.tr(" ", "_"))
+        q = q.name_matches(params[:name].mb_chars.downcase.strip.tr(" ", "_"))
       end
 
       if params[:name_matches].present?
-        q = q.name_matches(params[:name_matches].mb_chars.downcase.tr(" ", "_"))
+        q = q.name_matches(params[:name_matches].mb_chars.downcase.strip.tr(" ", "_"))
       end
 
       if params[:min_level].present?
         q = q.where("level >= ?", params[:min_level].to_i)
+      end
+
+      if params[:max_level].present?
+        q = q.where("level <= ?", params[:max_level].to_i)
       end
 
       if params[:level].present?
@@ -612,6 +668,7 @@ class User < ActiveRecord::Base
   include LimitMethods
   include InvitationMethods
   include ApiMethods
+  include CountMethods
   extend SearchMethods
 
   def initialize_default_image_size

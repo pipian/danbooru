@@ -3,7 +3,7 @@ class Post < ActiveRecord::Base
   class DisapprovalError < Exception ; end
   class SearchError < Exception ; end
 
-  attr_accessor :old_tag_string, :old_parent_id, :has_constraints
+  attr_accessor :old_tag_string, :old_parent_id, :has_constraints, :disable_versioning
   after_destroy :delete_files
   after_destroy :delete_remote_files
   after_save :create_version
@@ -14,8 +14,10 @@ class Post < ActiveRecord::Base
   before_save :create_tags
   before_save :update_tag_post_counts
   before_save :set_tag_counts
+  before_validation :strip_source
   before_validation :initialize_uploader, :on => :create
   before_validation :parse_pixiv_id
+  before_validation :blank_out_nonexistent_parents
   belongs_to :updater, :class_name => "User"
   belongs_to :approver, :class_name => "User"
   belongs_to :uploader, :class_name => "User"
@@ -30,8 +32,8 @@ class Post < ActiveRecord::Base
   has_many :children, :class_name => "Post", :foreign_key => "parent_id", :order => "posts.id"
   has_many :disapprovals, :class_name => "PostDisapproval", :dependent => :destroy
   validates_uniqueness_of :md5
-  validates_presence_of :parent, :if => lambda {|rec| !rec.parent_id.nil?}
-  attr_accessible :source, :rating, :tag_string, :old_tag_string, :last_noted_at, :parent_id, :as => [:member, :builder, :privileged, :platinum, :contributor, :janitor, :moderator, :admin, :default]
+  validate :post_is_not_its_own_parent
+  attr_accessible :source, :rating, :tag_string, :old_tag_string, :last_noted_at, :parent_id, :as => [:member, :builder, :gold, :platinum, :contributor, :janitor, :moderator, :admin, :default]
   attr_accessible :is_rating_locked, :is_note_locked, :as => [:builder, :contributor, :janitor, :moderator, :admin]
   attr_accessible :is_status_locked, :as => [:admin]
 
@@ -178,11 +180,11 @@ class Post < ActiveRecord::Base
     end
 
     def is_image?
-      file_ext =~ /jpg|jpeg|gif|png|mpo|svg/
+      file_ext =~ /jpg|jpeg|gif|png|mpo|svg/i
     end
 
     def is_flash?
-      file_ext =~ /swf/
+      file_ext =~ /swf/i
     end
 
     def is_svg?
@@ -199,8 +201,12 @@ class Post < ActiveRecord::Base
   end
 
   module ImageMethods
+    def twitter_card_supported?
+      file_size <= 1.megabyte && image_width.to_i >= 280 && image_height.to_i >= 150
+    end
+
     def has_large?
-      image_width.present? && image_width > Danbooru.config.large_image_width
+      is_image? && image_width.present? && image_width > Danbooru.config.large_image_width
     end
 
     def has_large
@@ -361,20 +367,24 @@ class Post < ActiveRecord::Base
     end
 
     def increment_tag_post_counts
-      Post.execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", tag_array) if tag_array.any?
+      Tag.update_all("post_count = post_count + 1", {:name => tag_array}) if tag_array.any?
     end
 
     def decrement_tag_post_counts
-      Post.execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", tag_array) if tag_array.any?
+      Tag.update_all("post_count = post_count - 1", {:name => tag_array}) if tag_array.any?
     end
 
     def update_tag_post_counts
       decrement_tags = tag_array_was - tag_array
       increment_tags = tag_array - tag_array_was
-      Post.execute_sql("UPDATE tags SET post_count = post_count - 1 WHERE name IN (?)", decrement_tags) if decrement_tags.any?
-      Post.execute_sql("UPDATE tags SET post_count = post_count + 1 WHERE name IN (?)", increment_tags) if increment_tags.any?
-      Post.expire_cache_for_all(decrement_tags) if decrement_tags.any?
-      Post.expire_cache_for_all(increment_tags) if increment_tags.any?
+      if increment_tags.any?
+        Tag.update_all("post_count = post_count + 1", {:name => increment_tags})
+        Post.expire_cache_for_all(increment_tags)
+      end
+      if decrement_tags.any?
+        Tag.update_all("post_count = post_count - 1", {:name => decrement_tags})
+        Post.expire_cache_for_all(decrement_tags)
+      end
       Post.expire_cache_for_all([""]) if new_record? || id <= 100_000
     end
 
@@ -385,7 +395,7 @@ class Post < ActiveRecord::Base
       self.tag_count_copyright = 0
       self.tag_count_character = 0
 
-      categories = Tag.categories_for(tag_array)
+      categories = Tag.categories_for(tag_array, :disable_caching => true)
       categories.each_value do |category|
         self.tag_count += 1
 
@@ -428,17 +438,18 @@ class Post < ActiveRecord::Base
 
     def normalize_tags
       normalized_tags = Tag.scan_tags(tag_string)
+      normalized_tags = filter_metatags(normalized_tags)
+      normalized_tags = normalized_tags.map{|tag| tag.downcase}
       normalized_tags = TagAlias.to_aliased(normalized_tags)
       normalized_tags = TagImplication.with_descendants(normalized_tags)
-      normalized_tags = filter_metatags(normalized_tags)
       normalized_tags = %w(tagme) if normalized_tags.empty?
       normalized_tags.sort!
       set_tag_string(normalized_tags.uniq.sort.join(" "))
     end
 
     def filter_metatags(tags)
-      @pre_metatags, tags = tags.partition {|x| x =~ /\A(?:rating|parent):/}
-      @post_metatags, tags = tags.partition {|x| x =~ /\A(?:-pool|pool|fav):/}
+      @pre_metatags, tags = tags.partition {|x| x =~ /\A(?:rating|parent):/i}
+      @post_metatags, tags = tags.partition {|x| x =~ /\A(?:-pool|pool|fav):/i}
       apply_pre_metatags
       return tags
     end
@@ -448,26 +459,26 @@ class Post < ActiveRecord::Base
 
       @post_metatags.each do |tag|
         case tag
-        when /^-pool:(\d+)$/
+        when /^-pool:(\d+)$/i
           pool = Pool.find_by_id($1.to_i)
           remove_pool!(pool) if pool
 
-        when /^-pool:(.+)$/
+        when /^-pool:(.+)$/i
           pool = Pool.find_by_name($1)
           remove_pool!(pool) if pool
 
-        when /^pool:(\d+)$/
+        when /^pool:(\d+)$/i
           pool = Pool.find_by_id($1.to_i)
           add_pool!(pool) if pool
 
-        when /^pool:(.+)$/
+        when /^pool:(.+)$/i
           pool = Pool.find_by_name($1)
           if pool.nil?
             pool = Pool.create(:name => $1, :description => "This pool was automatically generated")
           end
           add_pool!(pool) if pool
 
-        when /^fav:(.+)$/
+        when /^fav:(.+)$/i
           add_favorite!(CurrentUser.user)
         end
       end
@@ -478,16 +489,18 @@ class Post < ActiveRecord::Base
 
       @pre_metatags.each do |tag|
         case tag
-        when /^parent:none$/, /^parent:0$/
+        when /^parent:none$/i, /^parent:0$/i
           self.parent_id = nil
 
-        when /^parent:(\d+)$/
+        when /^parent:(\d+)$/i
           if Post.exists?(["id = ? and is_deleted = false", $1.to_i])
             self.parent_id = $1.to_i
           end
 
         when /^rating:([qse])/i
-          self.rating = $1.downcase
+          unless is_rating_locked?
+            self.rating = $1.downcase
+          end
         end
       end
     end
@@ -573,12 +586,25 @@ class Post < ActiveRecord::Base
   end
 
   module FavoriteMethods
+    def clean_fav_string?
+      rand(100) < [Math.log(fav_string.size, 2), 5].min
+    end
+
+    def clean_fav_string!
+      array = fav_string.scan(/\S+/).uniq
+      self.fav_string = array.join(" ")
+      self.fav_count = array.size
+      update_column(:fav_string, fav_string)
+      update_column(:fav_count, fav_count)
+    end
+
     def favorited_by?(user_id)
       fav_string =~ /(?:\A| )fav:#{user_id}(?:\Z| )/
     end
 
     def append_user_to_fav_string(user_id)
       update_column(:fav_string, (fav_string + " fav:#{user_id}").strip)
+      clean_fav_string! if clean_fav_string?
     end
 
     def add_favorite!(user)
@@ -627,6 +653,10 @@ class Post < ActiveRecord::Base
       pool_string =~ /(?:\A| )pool:#{pool.id}(?:\Z| )/
     end
 
+    def belongs_to_pool_with_id?(pool_id)
+      pool_string =~ /(?:\A| )pool:#{pool_id}(?:\Z| )/
+    end
+
     def add_pool!(pool)
       return if belongs_to_pool?(pool)
       return if pool.is_deleted?
@@ -642,6 +672,12 @@ class Post < ActiveRecord::Base
       update_column(:pool_string, pool_string) unless new_record?
       pool.remove!(self)
     end
+
+    def remove_from_all_pools
+      pools.find_each do |pool|
+        pool.remove!(self)
+      end
+    end
   end
 
   module VoteMethods
@@ -652,11 +688,11 @@ class Post < ActiveRecord::Base
     def vote!(score)
       if can_be_voted_by?(CurrentUser.user)
         if score == "up"
-          increment!(:score)
-          increment!(:up_score)
+          Post.update_all("score = score + 1, up_score = up_score + 1", {:id => id})
+          self.score += 1
         elsif score == "down"
-          decrement!(:score)
-          decrement!(:down_score)
+          Post.update_all("score = score - 1, down_score = down_score - 1", {:id => id})
+          self.score -= 1
         end
 
         votes.create(:score => score)
@@ -782,6 +818,12 @@ class Post < ActiveRecord::Base
       m.extend(ClassMethods)
     end
 
+    def blank_out_nonexistent_parents
+      if parent_id.present? && parent.nil?
+        self.parent_id = nil
+      end
+    end
+
     def validate_parent_does_not_have_a_parent
       return if parent.nil?
       if !parent.parent.nil?
@@ -828,6 +870,17 @@ class Post < ActiveRecord::Base
 
       update_column(:score, 0)
     end
+
+    def post_is_not_its_own_parent
+      if parent_id.present? && id == parent_id
+        errors[:base] << "Post cannot have itself as a parent"
+        false
+      end
+    end
+
+    def parent_exists?
+      Post.exists?(parent_id)
+    end
   end
 
   module DeletionMethods
@@ -843,6 +896,7 @@ class Post < ActiveRecord::Base
       update_children_on_destroy
       update_parent_on_destroy
       decrement_tag_post_counts
+      remove_from_all_pools
       destroy
     end
 
@@ -889,16 +943,8 @@ class Post < ActiveRecord::Base
   end
 
   module VersionMethods
-    def create_version
-      if created_at == updated_at
-        CurrentUser.increment!(:post_update_count)
-        versions.create(
-          :rating => rating,
-          :source => source,
-          :tags => tag_string,
-          :parent_id => parent_id
-        )
-      elsif rating_changed? || source_changed? || parent_id_changed? || tag_string_changed?
+    def create_version(force = false)
+      if new_record? || rating_changed? || source_changed? || parent_id_changed? || tag_string_changed? || force
         CurrentUser.increment!(:post_update_count)
         versions.create(
           :rating => rating,
@@ -926,6 +972,12 @@ class Post < ActiveRecord::Base
     def last_noted_at_as_integer
       last_noted_at.to_i
     end
+
+    def copy_notes_to(other_post)
+      notes.each do |note|
+        note.copy_to(other_post)
+      end
+    end
   end
 
   module ApiMethods
@@ -939,7 +991,7 @@ class Post < ActiveRecord::Base
       options[:except] += hidden_attributes
       unless options[:builder]
         options[:methods] ||= []
-        options[:methods] += [:uploader_name, :has_large, :tag_string_artist, :tag_string_character, :tag_string_copyright, :tag_string_general]
+        options[:methods] += [:uploader_name, :has_large, :tag_string_artist, :tag_string_character, :tag_string_copyright, :tag_string_general, :file_url, :large_file_url, :preview_file_url]
       end
       hash = super(options)
       hash
@@ -947,13 +999,8 @@ class Post < ActiveRecord::Base
 
     def to_xml(options = {}, &block)
       options ||= {}
-      options[:procs] ||= []
-      options[:procs] << lambda {|options, record| options[:builder].tag!("uploader-name", record.uploader_name)}
-      options[:procs] << lambda {|options, record| options[:builder].tag!("has-large", record.has_large?, :type => "boolean")}
-      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-artist", record.tag_string_artist)}
-      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-character", record.tag_string_character)}
-      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-copyright", record.tag_string_copyright)}
-      options[:procs] << lambda {|options, record| options[:builder].tag!("tag-string-general", record.tag_string_general)}
+      options[:methods] ||= []
+      options[:methods] += [:uploader_name, :has_large, :tag_string_artist, :tag_string_character, :tag_string_copyright, :tag_string_general, :file_url, :large_file_url, :preview_file_url]
       super(options, &block)
     end
 
@@ -1140,6 +1187,10 @@ class Post < ActiveRecord::Base
     @tag_categories = nil
     @typed_tags = nil
     self
+  end
+
+  def strip_source
+    self.source = source.try(:strip)
   end
 end
 

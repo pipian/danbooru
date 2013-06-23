@@ -26,7 +26,7 @@
 
   Danbooru.TagScript.process = function(tags, command) {
     if (command.match(/^\[if/)) {
-      var match = command.match(/\[if\s+(.+?)\s*,\s*(.+?)\]/)
+      var match = command.match(/\[if\s+(.+?)\s*,\s*(.+?)\]/);
       if (Danbooru.TagScript.test(tags, match[1])) {
         return Danbooru.TagScript.process(tags, match[2]);
       } else {
@@ -34,7 +34,7 @@
       }
     } else if (command === "[reset]") {
       return [];
-    } else if (command[0] === "-") {
+    } else if (command[0] === "-" && !command.match(/^-pool:/i)) {
       return Danbooru.reject(tags, function(x) {return x === command.substr(1, 100)});
     } else {
       tags.push(command);

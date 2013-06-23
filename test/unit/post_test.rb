@@ -31,6 +31,14 @@ class PostTest < ActiveSupport::TestCase
         end
       end
 
+      should "remove the post from all pools" do
+        pool = FactoryGirl.create(:pool)
+        pool.add!(@post)
+        @post.expunge!
+        pool.reload
+        assert_equal("", pool.post_ids)
+      end
+
       should "destroy the record" do
         @post.expunge!
         assert_equal([], @post.errors.full_messages)
@@ -110,12 +118,6 @@ class PostTest < ActiveSupport::TestCase
         p2.reload
         assert(!p1.has_children?, "Old parent should not have a child")
         assert(p2.has_children?, "New parent should have a child")
-      end
-
-      should "validate that the parent exists" do
-        post = FactoryGirl.build(:post, :parent_id => 1_000_000)
-        post.save
-        assert(post.errors[:parent].any?, "Parent should be invalid")
       end
     end
 
@@ -690,6 +692,7 @@ class PostTest < ActiveSupport::TestCase
         CurrentUser.ip_addr = "127.0.0.1"
         @post = FactoryGirl.create(:post)
         @post.add_favorite!(@user)
+        @user.reload
       end
 
       teardown do
@@ -698,13 +701,13 @@ class PostTest < ActiveSupport::TestCase
       end
 
       should "decrement the user's favorite_count" do
-        assert_difference("CurrentUser.favorite_count", -1) do
+        assert_difference("@user.favorite_count", -1) do
           @post.remove_favorite!(@user)
-          CurrentUser.reload
+          @user.reload
         end
       end
 
-      should "decrement the post's score for privileged users" do
+      should "decrement the post's score for gold users" do
         @post.remove_favorite!(@user)
         @post.reload
         assert_equal(0, @post.score)
@@ -721,9 +724,9 @@ class PostTest < ActiveSupport::TestCase
 
       should "not decrement the user's favorite_count if the user did not favorite the post" do
         @post2 = FactoryGirl.create(:post)
-        assert_difference("CurrentUser.favorite_count", 0) do
+        assert_difference("@user.favorite_count", 0) do
           @post2.remove_favorite!(@user)
-          CurrentUser.reload
+          @user.reload
         end
       end
     end
@@ -741,6 +744,15 @@ class PostTest < ActiveSupport::TestCase
         CurrentUser.ip_addr = nil
       end
 
+      should "periodically clean the fav_string" do
+        @post.update_column(:fav_string, "fav:1 fav:1 fav:1")
+        @post.update_column(:fav_count, 3)
+        @post.stubs(:clean_fav_string?).returns(true)
+        @post.append_user_to_fav_string(2)
+        assert_equal("fav:1 fav:2", @post.fav_string)
+        assert_equal(2, @post.fav_count)
+      end
+
       should "increment the user's favorite_count" do
         assert_difference("CurrentUser.favorite_count", 1) do
           @post.add_favorite!(@user)
@@ -748,7 +760,7 @@ class PostTest < ActiveSupport::TestCase
         end
       end
 
-      should "increment the post's score for privileged users" do
+      should "increment the post's score for gold users" do
         @post.add_favorite!(@user)
         @post.reload
         assert_equal(1, @post.score)
@@ -839,6 +851,28 @@ class PostTest < ActiveSupport::TestCase
   end
 
   context "Searching:" do
+    should "return posts for the age:<1minute tag" do
+      post1 = FactoryGirl.create(:post, :tag_string => "aaa")
+      count = Post.tag_match("age:<1minute").count
+      assert_equal(1, count)
+    end
+
+    should "return posts for the age:<1minute tag when the user is in Pacific time zone" do
+      post1 = FactoryGirl.create(:post, :tag_string => "aaa")
+      Time.zone = "Pacific Time (US & Canada)"
+      count = Post.tag_match("age:<1minute").count
+      assert_equal(1, count)
+      Time.zone = "Eastern Time (US & Canada)"
+    end
+
+    should "return posts for the age:<1minute tag when the user is in Tokyo time zone" do
+      post1 = FactoryGirl.create(:post, :tag_string => "aaa")
+      Time.zone = "Asia/Tokyo"
+      count = Post.tag_match("age:<1minute").count
+      assert_equal(1, count)
+      Time.zone = "Eastern Time (US & Canada)"
+    end
+
     should "return posts for the ' tag" do
       post1 = FactoryGirl.create(:post, :tag_string => "'")
       post2 = FactoryGirl.create(:post, :tag_string => "aaa bbb")

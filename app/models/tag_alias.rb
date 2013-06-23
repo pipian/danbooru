@@ -117,7 +117,7 @@ class TagAlias < ActiveRecord::Base
   end
 
   def ensure_category_consistency
-    if antecedent_tag.category != consequent_tag.category
+    if antecedent_tag.category != consequent_tag.category && antecedent_tag.category != Tag.categories.general
       consequent_tag.update_attribute(:category, antecedent_tag.category)
       consequent_tag.update_category_cache_for_all
     end
@@ -138,5 +138,27 @@ class TagAlias < ActiveRecord::Base
 
     antecedent_tag.fix_post_count if antecedent_tag
     consequent_tag.fix_post_count if consequent_tag
+  end
+
+  def rename_wiki_and_artist
+    antecedent_wiki = WikiPage.titled(antecedent_name).first
+    if antecedent_wiki.present? && WikiPage.titled(consequent_name).blank?
+      CurrentUser.scoped(creator, creator_ip_addr) do
+        antecedent_wiki.update_attributes(
+          :title => consequent_name
+        )
+      end
+    end
+
+    if antecedent_tag.category == Tag.categories.artist
+      antecedent_artist = Artist.name_matches(antecedent_name).first
+      if antecedent_artist.present? && Artist.name_matches(consequent_name).blank?
+        CurrentUser.scoped(creator, creator_ip_addr) do
+          antecedent_artist.update_attributes(
+            :name => consequent_name
+          )
+        end
+      end
+    end
   end
 end

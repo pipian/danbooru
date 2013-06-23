@@ -6,7 +6,7 @@ class TagSubscription < ActiveRecord::Base
   before_save :limit_tag_count
   attr_accessible :name, :tag_query, :post_ids, :is_public, :is_visible_on_profile
   validates_presence_of :name, :tag_query, :creator_id
-  validates_format_of :tag_query, :with => /^(?:\S+\s*){1,20}$/m, :message => "can have up to 20 tags"
+  validates_format_of :tag_query, :with => /\A(?:\S*\s*){1,20}\Z/, :message => "can have up to 20 tags"
   validate :creator_can_create_subscriptions, :on => :create
 
   def normalize_name
@@ -124,13 +124,19 @@ class TagSubscription < ActiveRecord::Base
   end
 
   def self.find_posts(user_id, name = nil, limit = Danbooru.config.tag_subscription_post_limit)
-    Post.where(["id in (?)", find_post_ids(user_id, name, limit)]).order("id DESC").limit(limit)
+    arel = Post.where(["id in (?)", find_post_ids(user_id, name, limit)])
+
+    if CurrentUser.user.hide_deleted_posts?
+      arel = arel.where("is_deleted = false")
+    end
+
+    arel.order("id DESC").limit(limit)
   end
 
   def self.process_all
     CurrentUser.scoped(User.admins.first, "127.0.0.1") do
       find_each do |tag_subscription|
-        if $job_task_daemon_active != false && tag_subscription.creator.is_privileged? && tag_subscription.is_active?
+        if $job_task_daemon_active != false && tag_subscription.creator.is_gold? && tag_subscription.is_active?
           begin
             tag_subscription.process
             tag_subscription.save

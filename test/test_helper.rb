@@ -1,7 +1,14 @@
 ENV["RAILS_ENV"] = "test"
 
-require 'simplecov'
-SimpleCov.start 'rails'
+if ENV["SIMPLECOV"]
+  require 'simplecov'
+  SimpleCov.start 'rails' do
+    add_filter ".bundle"
+    add_filter "script/"
+    add_filter "test/"
+    add_filter "config/"
+  end
+end
 
 require File.expand_path('../../config/environment', __FILE__)
 require 'rails/test_help'
@@ -89,3 +96,9 @@ class MockMemcache
 end
 
 MEMCACHE = MockMemcache.new
+
+VCR.configure do |c|
+  c.cassette_library_dir = "test/fixtures/vcr_cassettes"
+  c.hook_into :webmock
+  c.allow_http_connections_when_no_cassette = true
+end

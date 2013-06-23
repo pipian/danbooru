@@ -3,7 +3,7 @@ require 'test_helper'
 class PostVotesControllerTest < ActionController::TestCase
   context "The post vote controller" do
     setup do
-      @user = FactoryGirl.create(:privileged_user)
+      @user = FactoryGirl.create(:gold_user)
       CurrentUser.user = @user
       CurrentUser.ip_addr = "127.0.0.1"
       @post = FactoryGirl.create(:post)
@@ -20,6 +20,14 @@ class PostVotesControllerTest < ActionController::TestCase
         assert_response :success
         @post.reload
         assert_equal(1, @post.score)
+      end
+
+      context "that fails" do
+        should "return a 500" do
+          post :create, {:post_id => @post.id, :score => "up", :format => "json"}, {:user_id => @user.id}
+          post :create, {:post_id => @post.id, :score => "up", :format => "json"}, {:user_id => @user.id}
+          assert_equal("{\"success\": false, \"reason\": \"You have already voted for this post\"}", response.body.strip)
+        end
       end
 
       context "for a post that has already been voted on" do

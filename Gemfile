@@ -6,6 +6,10 @@ group :test do
   gem "mocha", :require => "mocha/setup"
   gem "ffaker", :git => "http://github.com/EmmanuelOga/ffaker.git"
   gem "simplecov", :require => false
+  gem "pry"
+  gem "vcr"
+  gem "webmock"
+  gem "timecop"
 end
 
 group :assets do
@@ -34,9 +38,10 @@ gem 'term-ansicolor', :require => "term/ansicolor"
 gem 'diff-lcs', :require => "diff/lcs/array"
 gem 'aws-s3', :require => "aws/s3"
 gem 'awesome_print'
+gem 'statistics2'
 
 group :production do
-  gem 'unicorn'
+  gem 'unicorn', :platforms => :ruby
   gem 'capistrano-unicorn', :require => false
 end
 
