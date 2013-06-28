@@ -21,7 +21,6 @@ class PostsController < ApplicationController
         root = ActiveSupport::XmlMini.rename_key("posts", {})
         children = root.singularize
         attributes = {:type => "array", 'total-count'.to_sym => Post.fast_count(@post_set.tag_string)}
-        return builder.tag!(root, attributes) if @posts.empty?
         xml = builder.__send__(:method_missing, root, attributes) do
           @posts.each { |value| ActiveSupport::XmlMini.to_tag(children, value, {:indent => 2, :builder => builder}) }
           yield builder if block_given?
