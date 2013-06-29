@@ -40,6 +40,8 @@
 
       <%= render "posts/partials/show/notices", :post => @post %>
 
+      <%= render_advertisement("horizontal") %>
+
       <section id="image-container" data-tags="<%= @post.tag_string %>" data-uploader="<%= @post.uploader_name %>" data-rating="<%= @post.rating %>" data-flags="<%= @post.status_flags %>">
         <div id="note-container"></div>
         <div id="note-preview"></div>
